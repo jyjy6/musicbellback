@@ -1,0 +1,93 @@
+HELP.md
+.gradle
+build/
+!gradle/wrapper/gradle-wrapper.jar
+!**/src/main/**/build/
+!**/src/test/**/build/
+
+### STS ###
+.apt_generated
+.classpath
+.factorypath
+.project
+.settings
+.springBeans
+.sts4-cache
+bin/
+!**/src/main/**/bin/
+!**/src/test/**/bin/
+
+### IntelliJ IDEA ###
+.idea
+*.iws
+*.iml
+*.ipr
+out/
+!**/src/main/**/out/
+!**/src/test/**/out/
+
+### NetBeans ###
+/nbproject/private/
+/nbbuild/
+/dist/
+/nbdist/
+/.nb-gradle/
+
+### VS Code ###
+.vscode/
+
+/src/main/resources/application-*.properties
+application.properties
+application.*
+*.properties
+application-test.properties
+bfg-1.15.0.jar
+
+
+
+
+
+public_key.pem
+
+# 🔥 ImgBell 프로젝트 .gitignore
+
+# ================================
+# 모니터링 & 데이터 디렉토리
+# ================================
+
+# Prometheus 데이터
+prometheus_data/
+
+# Grafana 데이터
+grafana_data/
+
+# Elasticsearch 데이터 (이미 있음)
+elasticsearch_data/
+
+# Redis 데이터
+redis_data/
+
+# ================================
+# 로그 파일
+# ================================
+*.log
+logs/
+
+# ================================
+# 임시 파일
+# ================================
+*.tmp
+*.temp
+.DS_Store
+Thumbs.db
+
+# ================================
+# IDE 설정
+# ================================
+.vscode/
+.idea/
+
+# ================================
+# Docker 관련
+# ================================
+.docker/

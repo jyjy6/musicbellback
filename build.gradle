@@ -1,0 +1,67 @@
+plugins {
+	id 'java'
+	id 'org.springframework.boot' version '3.5.3'
+	id 'io.spring.dependency-management' version '1.1.7'
+}
+
+group = 'MusicBellBackEnd'
+version = '0.0.1-SNAPSHOT'
+
+java {
+	toolchain {
+		languageVersion = JavaLanguageVersion.of(21)
+	}
+}
+
+configurations {
+	compileOnly {
+		extendsFrom annotationProcessor
+	}
+}
+
+repositories {
+	mavenCentral()
+}
+
+dependencies {
+	implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
+	implementation 'org.springframework.boot:spring-boot-starter-security'
+	implementation 'org.springframework.boot:spring-boot-starter-web'
+	compileOnly 'org.projectlombok:lombok'
+	developmentOnly 'org.springframework.boot:spring-boot-devtools'
+	runtimeOnly 'com.mysql:mysql-connector-j'
+	annotationProcessor 'org.projectlombok:lombok'
+	testImplementation 'org.springframework.boot:spring-boot-starter-test'
+	testImplementation 'org.springframework.security:spring-security-test'
+	testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+
+	implementation 'io.awspring.cloud:spring-cloud-aws-starter-s3:3.1.1'
+
+
+	implementation 'org.springframework.boot:spring-boot-starter-oauth2-client'
+
+	implementation 'io.jsonwebtoken:jjwt-api:0.12.5'
+	implementation 'io.jsonwebtoken:jjwt-gson:0.12.5'
+	implementation 'io.jsonwebtoken:jjwt-impl:0.12.5'
+
+	// 카카오 OAuth를 위한 HTTP 클라이언트 (선택사항)
+	implementation 'org.springframework.boot:spring-boot-starter-webflux'
+
+	// 🚀 Apache Kafka 의존성 (메시지 큐 시스템)
+	implementation 'org.springframework.kafka:spring-kafka'
+	// Kafka 테스트용 임베디드 카프카
+	testImplementation 'org.springframework.kafka:spring-kafka-test'
+	// JSON 직렬화/역직렬화를 위한 Jackson
+	implementation 'com.fasterxml.jackson.core:jackson-core'
+	implementation 'com.fasterxml.jackson.core:jackson-annotations'
+
+	// 🔥 현업용 Elasticsearch 의존성 (Spring Boot 3.x 호환)
+	implementation 'org.springframework.boot:spring-boot-starter-data-elasticsearch'
+//	implementation 'co.elastic.clients:elasticsearch-java:8.11.0'
+	implementation 'com.fasterxml.jackson.core:jackson-databind'
+
+}
+
+tasks.named('test') {
+	useJUnitPlatform()
+}
