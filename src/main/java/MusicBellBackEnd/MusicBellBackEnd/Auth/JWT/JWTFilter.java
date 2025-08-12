@@ -56,7 +56,7 @@ public class JWTFilter extends OncePerRequestFilter {
             return;
         }
 
-        
+
         if (pathMatcher.match("/api/oauth/google/call-back", request.getRequestURI())) {
             System.out.println("OAuth 요청이므로 JWT 필터를 건너뜁니다.");
             filterChain.doFilter(request, response);
@@ -89,10 +89,10 @@ public class JWTFilter extends OncePerRequestFilter {
             return;
         }
 
-
         // 요청에서 JWT 추출
 
         String jwt = getJwtFromRequest(request);
+        String refreshJwt = getRefreshJwtFromRequest(request);
 
         System.out.println("현재jwt"+jwt);
 
@@ -101,7 +101,7 @@ public class JWTFilter extends OncePerRequestFilter {
                 // JWT 유효성 검증
                 System.out.println("만료됐는지 확인1");
                 if (!jwtUtil.isTokenExpired(jwt)) {
-                    // GEMINI: extractToken -> extractClaims 로 변경
+                    // JWT에서 Claims 추출
                     Claims claims = jwtUtil.extractClaims(jwt);
                     String userInfoJson = claims.get("userInfo", String.class);
 
@@ -132,11 +132,11 @@ public class JWTFilter extends OncePerRequestFilter {
                     SecurityContextHolder.getContext().setAuthentication(authentication);
 
                 } else {
-//                    response.setHeader("Access-Control-Allow-Origin", allowedOrigins);
-//                    response.setHeader("Access-Control-Allow-Credentials", "true");
-                    // 401 응답 설정
-                    response.sendError(HttpServletResponse.SC_UNAUTHORIZED, "Token expired");
-                    return; // 필터 체인 종료
+                    System.out.println("토큰 만료됐음ㅇㅇ");
+                    response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
+                    response.setContentType("application/json; charset=UTF-8");
+                    response.getWriter().write("{\"message\": \"Access token expired\"}");
+                    return;
                 }
             } catch (Exception e) {
                 System.out.println("JWT 검증 실패: " + e.getMessage());
@@ -144,6 +144,8 @@ public class JWTFilter extends OncePerRequestFilter {
                 response.sendError(HttpServletResponse.SC_UNAUTHORIZED, "Invalid JWT token");
                 return; // 필터 체인 종료
             }
+        } else if (refreshJwt != null){
+            response.sendError(HttpServletResponse.SC_UNAUTHORIZED, "accessToken Is Null Refresh");
         }
 
         filterChain.doFilter(request, response);
@@ -165,6 +167,18 @@ public class JWTFilter extends OncePerRequestFilter {
         String bearerToken = request.getHeader("Authorization");
         if (bearerToken != null && bearerToken.startsWith("Bearer ")) {
             return bearerToken.substring(7); // "Bearer " 제거
+        }
+        return null;
+    }
+
+    private String getRefreshJwtFromRequest(HttpServletRequest request) {
+        // 1. 쿠키에서 refreshToken 찾기
+        if (request.getCookies() != null) {
+            for (jakarta.servlet.http.Cookie cookie : request.getCookies()) {
+                if ("refreshToken".equals(cookie.getName())) {
+                    return cookie.getValue();
+                }
+            }
         }
         return null;
     }
