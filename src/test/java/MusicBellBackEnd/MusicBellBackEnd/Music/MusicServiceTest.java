@@ -1,5 +1,6 @@
 package MusicBellBackEnd.MusicBellBackEnd.Music;
 
+import MusicBellBackEnd.MusicBellBackEnd.Auth.CustomUserDetails;
 import MusicBellBackEnd.MusicBellBackEnd.GlobalErrorHandler.GlobalException;
 import MusicBellBackEnd.MusicBellBackEnd.Music.Dto.MusicRequestDto;
 import MusicBellBackEnd.MusicBellBackEnd.Music.Dto.MusicResponseDto;
@@ -7,9 +8,11 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.security.core.Authentication;
 import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.presigner.S3Presigner;
 
@@ -37,6 +40,12 @@ class MusicServiceTest {
     @Mock
     private S3Presigner s3Presigner;
 
+    @Mock
+    private Authentication authentication;
+
+    @Mock
+    private CustomUserDetails customUserDetails;
+
     @InjectMocks
     private MusicService musicService;
 
@@ -45,6 +54,10 @@ class MusicServiceTest {
 
     @BeforeEach
     void setUp() {
+        // CustomUserDetails 모킹 설정
+        when(customUserDetails.getId()).thenReturn(123L);
+        when(authentication.getPrincipal()).thenReturn(customUserDetails);
+
         sampleDto1 = MusicRequestDto.builder()
                 .title("Song A")
                 .artist("Artist A")
@@ -76,7 +89,9 @@ class MusicServiceTest {
                 .fileType("mp3")
                 .musicGrade("EXPLICIT")
                 .build();
+
     }
+    
 
     @Test
     @DisplayName("uploadMusics: DTO 리스트를 저장하고 동일 크기의 응답 DTO 리스트를 반환한다")
@@ -96,6 +111,7 @@ class MusicServiceTest {
                     .musicUrl(toSave.getMusicUrl())
                     .albumImageUrl(toSave.getAlbumImageUrl())
                     .uploaderName(toSave.getUploaderName())
+                    .uploaderId(toSave.getUploaderId()) // uploaderId 추가
                     .playCount(toSave.getPlayCount())
                     .likeCount(toSave.getLikeCount())
                     .isPublic(toSave.getIsPublic())
@@ -106,7 +122,7 @@ class MusicServiceTest {
         });
 
         // when
-        List<MusicResponseDto> responses = musicService.uploadMusics(List.of(sampleDto1, sampleDto2));
+        List<MusicResponseDto> responses = musicService.uploadMusics(List.of(sampleDto1, sampleDto2), authentication);
 
         // then
         assertThat(responses).hasSize(2);
@@ -152,13 +168,62 @@ class MusicServiceTest {
     }
 
     @Test
+    @DisplayName("uploadMusics: uploaderId가 제대로 설정되는지 확인한다")
+    void uploadMusics_setsUploaderIdCorrectly() {
+        // given
+        Long expectedUploaderId = 123L;
+        when(customUserDetails.getId()).thenReturn(expectedUploaderId);
+        when(authentication.getPrincipal()).thenReturn(customUserDetails);
+        
+        // ArgumentCaptor를 사용하여 저장되는 엔티티를 캡처
+        ArgumentCaptor<MusicEntity> musicEntityCaptor = ArgumentCaptor.forClass(MusicEntity.class);
+        
+        when(musicRepository.save(any(MusicEntity.class))).thenAnswer(invocation -> {
+            MusicEntity toSave = invocation.getArgument(0);
+            return MusicEntity.builder()
+                    .id(1L)
+                    .title(toSave.getTitle())
+                    .artist(toSave.getArtist())
+                    .album(toSave.getAlbum())
+                    .genre(toSave.getGenre())
+                    .releaseDate(toSave.getReleaseDate())
+                    .duration(toSave.getDuration())
+                    .musicUrl(toSave.getMusicUrl())
+                    .albumImageUrl(toSave.getAlbumImageUrl())
+                    .uploaderName(toSave.getUploaderName())
+                    .uploaderId(toSave.getUploaderId())
+                    .playCount(toSave.getPlayCount())
+                    .likeCount(toSave.getLikeCount())
+                    .isPublic(toSave.getIsPublic())
+                    .fileSize(toSave.getFileSize())
+                    .fileType(toSave.getFileType())
+                    .musicGrade(toSave.getMusicGrade())
+                    .build();
+        });
+
+        // when
+        List<MusicResponseDto> responses = musicService.uploadMusics(List.of(sampleDto1), authentication);
+
+        // then
+        assertThat(responses).hasSize(1);
+        
+        // repository.save가 호출될 때 전달된 엔티티를 캡처하여 uploaderId 확인
+        verify(musicRepository, times(1)).save(musicEntityCaptor.capture());
+        
+        MusicEntity capturedEntity = musicEntityCaptor.getValue();
+        assertThat(capturedEntity.getUploaderId()).isEqualTo(expectedUploaderId);
+        assertThat(capturedEntity.getTitle()).isEqualTo(sampleDto1.getTitle());
+        assertThat(capturedEntity.getArtist()).isEqualTo(sampleDto1.getArtist());
+    }
+
+    @Test
     @DisplayName("uploadMusics: 저장 중 예외가 발생하면 GlobalException을 던진다")
     void uploadMusics_failure_throwsGlobalException() {
         when(musicRepository.save(any(MusicEntity.class)))
                 .thenThrow(new RuntimeException("DB down"));
 
         GlobalException thrown = assertThrows(GlobalException.class,
-                () -> musicService.uploadMusics(List.of(sampleDto1)));
+                () -> musicService.uploadMusics(List.of(sampleDto1), authentication));
 
         assertAll(
                 () -> assertThat(thrown.getMessage()).isEqualTo("음악 업로드에 실패했습니다."),

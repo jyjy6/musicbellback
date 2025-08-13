@@ -66,7 +66,7 @@ public class MusicController {
 //            throw new GlobalException("로그인이 필요합니다.", "UNAUTHORIZED", HttpStatus.UNAUTHORIZED);
 //        }
 
-        List<MusicResponseDto> savedMusics = musicService.uploadMusics(musicRequests);
+        List<MusicResponseDto> savedMusics = musicService.uploadMusics(musicRequests, auth);
         log.info("사용자 {}가 {}개의 음악을 업로드했습니다.", auth.getName(), savedMusics.size());
         
         return ResponseEntity.status(HttpStatus.CREATED).body(savedMusics);

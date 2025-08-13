@@ -22,6 +22,7 @@ public class MusicResponseDto {
     private String musicUrl; // S3에 저장된 음악 파일 URL
     private String albumImageUrl; // 앨범 커버 이미지 URL
     private String uploaderName;
+    private String uploaderId;
     private Long playCount; // 재생횟수
     private Long likeCount; // 좋아요 수
     private Boolean isPublic; // 공개 여부

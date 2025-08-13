@@ -1,5 +1,6 @@
 package MusicBellBackEnd.MusicBellBackEnd.Music;
 
+import MusicBellBackEnd.MusicBellBackEnd.Auth.CustomUserDetails;
 import MusicBellBackEnd.MusicBellBackEnd.GlobalErrorHandler.GlobalException;
 import MusicBellBackEnd.MusicBellBackEnd.Music.Dto.*;
 import lombok.RequiredArgsConstructor;
@@ -10,6 +11,7 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.http.HttpStatus;
+import org.springframework.security.core.Authentication;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import software.amazon.awssdk.services.s3.S3Client;
@@ -49,10 +51,14 @@ public class MusicService {
 
     // 음악 업로드 (다중)
     @Transactional
-    public List<MusicResponseDto> uploadMusics(List<MusicRequestDto> musicRequestDtos) {
+    public List<MusicResponseDto> uploadMusics(List<MusicRequestDto> musicRequestDtos, Authentication auth) {
+
+        Long uploaderId = ((CustomUserDetails)auth.getPrincipal()).getId();
+
         try {
             List<MusicEntity> savedMusics = musicRequestDtos.stream()
                     .map(this::convertToEntity)
+                    .peek(entity -> entity.setUploaderId(uploaderId))
                     .map(musicRepository::save)
                     .collect(Collectors.toList());
             
@@ -77,7 +83,7 @@ public class MusicService {
     // 음악 목록 조회 (페이징)
     public MusicPageResponseDto getAllMusics(int page, int size, String sortBy, String sortOrder) {
         try {
-            Sort.Direction direction = "asc".equalsIgnoreCase(sortOrder) 
+            Sort.Direction direction = "asc".equalsIgnoreCase(sortOrder)
                     ? Sort.Direction.ASC 
                     : Sort.Direction.DESC;
             

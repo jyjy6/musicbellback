@@ -14,6 +14,7 @@ public class MusicSearchDto {
     private String album;
     private String genre;
     private String uploaderName;
+    private String uploaderId;
     private Boolean isPublic;
     private String musicGrade;
     

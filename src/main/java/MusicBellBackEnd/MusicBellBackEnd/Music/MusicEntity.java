@@ -46,6 +46,8 @@ public class MusicEntity {
     
     @Column(nullable = false, length = 100)
     private String uploaderName;
+
+    private Long uploaderId;
     
     @Column(columnDefinition = "integer default 0")
     private Long playCount = 0L; // 재생횟수

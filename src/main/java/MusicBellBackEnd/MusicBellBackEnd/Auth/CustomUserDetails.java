@@ -99,6 +99,7 @@ public class CustomUserDetails implements UserDetails, OAuth2User {
         return member.getId();
     }
 
+
     // 프리미엄 상태 확인 메소드
     public boolean isPremium() {
         if (!member.getRoleSet().contains("ROLE_PREMIUM")) {
