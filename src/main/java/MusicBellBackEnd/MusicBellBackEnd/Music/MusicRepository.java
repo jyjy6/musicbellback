@@ -68,4 +68,18 @@ public interface MusicRepository extends JpaRepository<MusicEntity, Long> {
     @Modifying
     @Query("UPDATE MusicEntity m SET m.likeCount = m.likeCount - 1 WHERE m.id = :id AND m.likeCount > 0")
     void decrementLikeCount(@Param("id") Long id);
+    
+    // === 마이그레이션 관련 쿼리 ===
+    
+    // 마이그레이션이 필요한 음악 조회 (기존 artist는 있지만 artistEntity가 null)
+    @Query("SELECT m FROM MusicEntity m WHERE m.artist IS NOT NULL AND m.artistEntity IS NULL")
+    Page<MusicEntity> findMusicNeedingMigration(Pageable pageable);
+    
+    // 마이그레이션된 음악 개수
+    @Query("SELECT COUNT(m) FROM MusicEntity m WHERE m.artistEntity IS NOT NULL")
+    long countMigratedMusic();
+    
+    // 마이그레이션되지 않은 음악 개수
+    @Query("SELECT COUNT(m) FROM MusicEntity m WHERE m.artist IS NOT NULL AND m.artistEntity IS NULL")
+    long countUnmigratedMusic();
 }

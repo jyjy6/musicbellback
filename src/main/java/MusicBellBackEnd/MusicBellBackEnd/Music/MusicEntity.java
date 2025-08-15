@@ -1,5 +1,6 @@
 package MusicBellBackEnd.MusicBellBackEnd.Music;
 
+import MusicBellBackEnd.MusicBellBackEnd.Artist.ArtistEntity;
 import jakarta.persistence.*;
 import lombok.*;
 import org.hibernate.annotations.CreationTimestamp;
@@ -23,8 +24,14 @@ public class MusicEntity {
     @Column(nullable = false, length = 500)
     private String title;
     
-    @Column(nullable = false, length = 200)
-    private String artist;
+    // 기존 데이터 보존 (마이그레이션 완료 후 제거 예정)
+    @Column(length = 200)
+    private String artist; // 기존 필드명 그대로 유지하여 데이터 보존
+    
+    // 새로운 아티스트 관계 (NULL 허용으로 점진적 전환)
+    @ManyToOne(fetch = FetchType.LAZY, cascade = CascadeType.PERSIST)
+    @JoinColumn(name = "artist_id")
+    private ArtistEntity artistEntity; // 기존 필드와 구분하기 위해 다른 이름 사용
     
     @Column(length = 200)
     private String album;
@@ -75,5 +82,25 @@ public class MusicEntity {
     @Column(nullable = false)
     private LocalDateTime updatedAt;
     
+    // === 마이그레이션 관련 헬퍼 메소드 ===
+    
+    /**
+     * 아티스트명을 반환 (새 관계 우선, 없으면 기존 필드)
+     */
+    public String getArtistDisplayName() {
+        if (artistEntity != null) {
+            return artistEntity.getName();
+        }
+        return artist; // 기존 String 필드
+    }
+    
+    /**
+     * 기존 String artist 필드를 ArtistEntity로 마이그레이션하기 위한 헬퍼
+     */
+    public void migrateToArtistEntity(ArtistEntity artistEntity) {
+        this.artistEntity = artistEntity;
+        // 마이그레이션 완료 후에는 기존 artist 필드를 null로 설정할 수 있음
+        // this.artist = null; 
+    }
 
 }
