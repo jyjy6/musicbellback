@@ -82,7 +82,6 @@ public class ArtistController {
                 .page(page)
                 .size(size)
                 .build();
-
         ArtistPageResponseDto searchResults = artistService.searchArtists(searchDto);
         return ResponseEntity.ok(searchResults);
     }

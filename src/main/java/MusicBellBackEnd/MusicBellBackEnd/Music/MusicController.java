@@ -1,7 +1,10 @@
 package MusicBellBackEnd.MusicBellBackEnd.Music;
 
+import MusicBellBackEnd.MusicBellBackEnd.Auth.CustomUserDetails;
 import MusicBellBackEnd.MusicBellBackEnd.GlobalErrorHandler.GlobalException;
 import MusicBellBackEnd.MusicBellBackEnd.Music.Dto.*;
+import MusicBellBackEnd.MusicBellBackEnd.Redis.PlaylistService;
+import MusicBellBackEnd.MusicBellBackEnd.Redis.PlaylistItem;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -23,6 +26,7 @@ import java.util.UUID;
 public class MusicController {
 
     private final MusicService musicService;
+    private final PlaylistService playlistService;
     @Value("${spring.cloud.aws.s3.bucket}")
     private String bucket;
 
@@ -86,8 +90,8 @@ public class MusicController {
 
     // 음악 상세 조회
     @GetMapping("/{id}")
-    public ResponseEntity<MusicResponseDto> getMusicById(@PathVariable Long id) {
-        MusicResponseDto music = musicService.getMusicById(id);
+    public ResponseEntity<MusicResponseDto> getMusicById(@PathVariable Long id, Authentication auth) {
+        MusicResponseDto music = musicService.getMusicById(id, auth);
         return ResponseEntity.ok(music);
     }
 
@@ -155,14 +159,6 @@ public class MusicController {
         return ResponseEntity.ok(Map.of("message", "음악이 성공적으로 삭제되었습니다."));
     }
 
-    // 재생수 증가
-    @PostMapping("/{id}/play")
-    public ResponseEntity<Map<String, String>> incrementPlayCount(@PathVariable Long id) {
-        musicService.incrementPlayCount(id);
-        log.info("음악 ID {} 재생수 증가", id);
-        
-        return ResponseEntity.ok(Map.of("message", "재생수가 증가되었습니다."));
-    }
 
     // 좋아요 토글
     @PostMapping("/{id}/like")
@@ -237,6 +233,136 @@ public class MusicController {
 
         MusicPageResponseDto genreMusics = musicService.searchMusics(searchDto);
         return ResponseEntity.ok(genreMusics);
+    }
+
+    // === 플레이리스트 관련 엔드포인트 ===
+
+    // 사용자 플레이리스트 조회
+    @GetMapping("/playlist")
+    public ResponseEntity<List<PlaylistItem>> getPlaylist(Authentication auth) {
+        if (auth == null) {
+            throw new GlobalException("로그인이 필요합니다.", "UNAUTHORIZED", HttpStatus.UNAUTHORIZED);
+        }
+
+        Long userId = ((CustomUserDetails) auth.getPrincipal()).getId();
+        List<PlaylistItem> playlist = playlistService.getPlaylist(userId);
+        return ResponseEntity.ok(playlist);
+    }
+
+    // 플레이리스트에 음악 수동 추가
+    @PostMapping("/playlist/{musicId}")
+    public ResponseEntity<Map<String, String>> addToPlaylist(
+            @PathVariable Long musicId,
+            Authentication auth
+    ) {
+        if (auth == null) {
+            throw new GlobalException("로그인이 필요합니다.", "UNAUTHORIZED", HttpStatus.UNAUTHORIZED);
+        }
+
+        Long userId = ((CustomUserDetails) auth.getPrincipal()).getId();
+        
+        // 음악 정보 조회
+        MusicResponseDto music = musicService.getMusicById(musicId, null); // 플레이리스트 자동 추가 방지
+        
+        playlistService.addToPlaylist(userId, music.getId(), music.getTitle(), music.getMusicUrl());
+        log.info("사용자 ID {}가 음악 ID {}를 플레이리스트에 추가했습니다.", userId, musicId);
+        
+        return ResponseEntity.ok(Map.of("message", "플레이리스트에 추가되었습니다."));
+    }
+
+    // 플레이리스트에서 음악 제거 (musicId로)
+    @DeleteMapping("/playlist/{musicId}")
+    public ResponseEntity<Map<String, String>> removeFromPlaylist(
+            @PathVariable Long musicId,
+            Authentication auth
+    ) {
+        if (auth == null) {
+            throw new GlobalException("로그인이 필요합니다.", "UNAUTHORIZED", HttpStatus.UNAUTHORIZED);
+        }
+
+        Long userId = ((CustomUserDetails) auth.getPrincipal()).getId();
+        playlistService.removeFromPlaylistByMusicId(userId, musicId);
+        log.info("사용자 ID {}가 음악 ID {}를 플레이리스트에서 제거했습니다.", userId, musicId);
+        
+        return ResponseEntity.ok(Map.of("message", "플레이리스트에서 제거되었습니다."));
+    }
+
+    // 플레이리스트에서 음악 제거 (인덱스로)
+    @DeleteMapping("/playlist/index/{index}")
+    public ResponseEntity<Map<String, String>> removeFromPlaylistByIndex(
+            @PathVariable int index,
+            Authentication auth
+    ) {
+        if (auth == null) {
+            throw new GlobalException("로그인이 필요합니다.", "UNAUTHORIZED", HttpStatus.UNAUTHORIZED);
+        }
+
+        Long userId = ((CustomUserDetails) auth.getPrincipal()).getId();
+        playlistService.removeFromPlaylist(userId, index);
+        log.info("사용자 ID {}가 플레이리스트 인덱스 {}를 제거했습니다.", userId, index);
+        
+        return ResponseEntity.ok(Map.of("message", "플레이리스트에서 제거되었습니다."));
+    }
+
+    // 플레이리스트 전체 삭제
+    @DeleteMapping("/playlist")
+    public ResponseEntity<Map<String, String>> clearPlaylist(Authentication auth) {
+        if (auth == null) {
+            throw new GlobalException("로그인이 필요합니다.", "UNAUTHORIZED", HttpStatus.UNAUTHORIZED);
+        }
+
+        Long userId = ((CustomUserDetails) auth.getPrincipal()).getId();
+        playlistService.clearPlaylist(userId);
+        log.info("사용자 ID {}가 플레이리스트를 전체 삭제했습니다.", userId);
+        
+        return ResponseEntity.ok(Map.of("message", "플레이리스트가 전체 삭제되었습니다."));
+    }
+
+    // 플레이리스트 순서 변경
+    @PutMapping("/playlist/move")
+    public ResponseEntity<Map<String, String>> movePlaylistItem(
+            @RequestParam int fromIndex,
+            @RequestParam int toIndex,
+            Authentication auth
+    ) {
+        if (auth == null) {
+            throw new GlobalException("로그인이 필요합니다.", "UNAUTHORIZED", HttpStatus.UNAUTHORIZED);
+        }
+
+        Long userId = ((CustomUserDetails) auth.getPrincipal()).getId();
+        playlistService.movePlaylistItem(userId, fromIndex, toIndex);
+        log.info("사용자 ID {}가 플레이리스트 순서를 변경했습니다. {} -> {}", userId, fromIndex, toIndex);
+        
+        return ResponseEntity.ok(Map.of("message", "플레이리스트 순서가 변경되었습니다."));
+    }
+
+    // 플레이리스트 개수 조회
+    @GetMapping("/playlist/count")
+    public ResponseEntity<Map<String, Integer>> getPlaylistCount(Authentication auth) {
+        if (auth == null) {
+            throw new GlobalException("로그인이 필요합니다.", "UNAUTHORIZED", HttpStatus.UNAUTHORIZED);
+        }
+
+        Long userId = ((CustomUserDetails) auth.getPrincipal()).getId();
+        int count = playlistService.getPlaylistCount(userId);
+        
+        return ResponseEntity.ok(Map.of("count", count));
+    }
+
+    // 특정 음악이 플레이리스트에 있는지 확인
+    @GetMapping("/playlist/contains/{musicId}")
+    public ResponseEntity<Map<String, Boolean>> isInPlaylist(
+            @PathVariable Long musicId,
+            Authentication auth
+    ) {
+        if (auth == null) {
+            throw new GlobalException("로그인이 필요합니다.", "UNAUTHORIZED", HttpStatus.UNAUTHORIZED);
+        }
+
+        Long userId = ((CustomUserDetails) auth.getPrincipal()).getId();
+        boolean isInPlaylist = playlistService.isInPlaylist(userId, musicId);
+        
+        return ResponseEntity.ok(Map.of("isInPlaylist", isInPlaylist));
     }
 }
 

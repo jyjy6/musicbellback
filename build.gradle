@@ -60,6 +60,11 @@ dependencies {
 //	implementation 'co.elastic.clients:elasticsearch-java:8.11.0'
 	implementation 'com.fasterxml.jackson.core:jackson-databind'
 
+
+	// Redis 연결 풀링을 위한 의존성
+	implementation 'org.springframework.boot:spring-boot-starter-data-redis'
+	implementation 'org.apache.commons:commons-pool2:2.12.0'
+
 }
 
 tasks.named('test') {

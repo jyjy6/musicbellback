@@ -1,8 +1,13 @@
 package MusicBellBackEnd.MusicBellBackEnd.Music;
 
+import MusicBellBackEnd.MusicBellBackEnd.Artist.ArtistEntity;
+import MusicBellBackEnd.MusicBellBackEnd.Artist.ArtistService;
 import MusicBellBackEnd.MusicBellBackEnd.Auth.CustomUserDetails;
 import MusicBellBackEnd.MusicBellBackEnd.GlobalErrorHandler.GlobalException;
 import MusicBellBackEnd.MusicBellBackEnd.Music.Dto.*;
+import MusicBellBackEnd.MusicBellBackEnd.Redis.RankingService;
+import MusicBellBackEnd.MusicBellBackEnd.Redis.RedisService;
+import MusicBellBackEnd.MusicBellBackEnd.Redis.PlaylistService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -30,6 +35,11 @@ import java.util.stream.Collectors;
 public class MusicService {
     private final S3Client s3Client;
     private final MusicRepository musicRepository;
+    private final ArtistService artistService;
+    private final RedisService redisService;
+    private final RankingService rankingService;
+    private final PlaylistService playlistService;
+
 
     @Value("${spring.cloud.aws.s3.bucket}")
     private String bucket;
@@ -73,10 +83,25 @@ public class MusicService {
     }
 
     // 음악 상세 조회
-    public MusicResponseDto getMusicById(Long id) {
+    public MusicResponseDto getMusicById(Long id, Authentication auth) {
         MusicEntity music = musicRepository.findById(id)
                 .orElseThrow(() -> new GlobalException("음악을 찾을 수 없습니다.", "MUSIC_NOT_FOUND", HttpStatus.NOT_FOUND));
+
+        //추후 Kafka로 비동기처리
+        this.incrementPlayCount(id);
         
+        // 로그인된 사용자의 플레이리스트에 자동 추가
+        if(auth != null && auth.isAuthenticated()){
+            try {
+                Long userId = ((CustomUserDetails) auth.getPrincipal()).getId();
+                playlistService.addToPlaylist(userId, music.getId(), music.getTitle(), music.getMusicUrl());
+                log.info("사용자 ID {}의 플레이리스트에 음악 ID {} 추가됨", userId, music.getId());
+            } catch (Exception e) {
+                log.warn("플레이리스트 추가 중 오류 발생: {}", e.getMessage());
+                // 플레이리스트 추가 실패해도 음악 조회는 정상 진행
+            }
+        }
+
         return convertToResponseDto(music);
     }
 
@@ -161,17 +186,6 @@ public class MusicService {
         log.info("음악 ID {}가 삭제되었습니다.", id);
     }
 
-    // 재생수 증가
-    @Transactional
-    public void incrementPlayCount(Long id) {
-        if (!musicRepository.existsById(id)) {
-            throw new GlobalException("음악을 찾을 수 없습니다.", "MUSIC_NOT_FOUND", HttpStatus.NOT_FOUND);
-        }
-        
-        musicRepository.incrementPlayCount(id);
-        log.info("음악 ID {} 재생수가 증가되었습니다.", id);
-    }
-
     // 좋아요 토글
     @Transactional
     public boolean toggleLike(Long id, boolean isLike) {
@@ -209,9 +223,16 @@ public class MusicService {
     // === 변환 메서드들 ===
     
     private MusicEntity convertToEntity(MusicRequestDto dto) {
+        // String artist를 ArtistEntity로 변환 (기존 데이터와의 호환성 유지)
+        ArtistEntity artistEntity = null;
+        if (dto.getArtist() != null && !dto.getArtist().trim().isEmpty()) {
+            artistEntity = artistService.findOrCreateArtist(dto.getArtist());
+        }
+        
         return MusicEntity.builder()
                 .title(dto.getTitle())
-                .artist(dto.getArtist())
+                .artist(dto.getArtist()) // 기존 String 필드 유지 (점진적 전환)
+                .artistEntity(artistEntity) // 새로운 ArtistEntity 관계 설정
                 .album(dto.getAlbum())
                 .genre(dto.getGenre())
                 .releaseDate(dto.getReleaseDate())
@@ -289,5 +310,20 @@ public class MusicService {
         if (dto.getAlbumImageUrl() != null) entity.setAlbumImageUrl(dto.getAlbumImageUrl());
         if (dto.getIsPublic() != null) entity.setIsPublic(dto.getIsPublic());
         if (dto.getMusicGrade() != null) entity.setMusicGrade(dto.getMusicGrade());
+    }
+
+    @Transactional
+    public void incrementPlayCount(Long musicId) {
+        // DB 업데이트
+        MusicEntity music = musicRepository.findById(musicId)
+                .orElseThrow(() -> new GlobalException("음악을 찾을 수 없습니다.", "NOT_MUSIC_FOUND", HttpStatus.NOT_FOUND));
+        music.setPlayCount(music.getPlayCount() + 1);
+        musicRepository.save(music);
+
+        // Redis 캐시 업데이트
+        redisService.incrementHashValue("music:stats:" + musicId, "playCount", 1);
+
+        // 랭킹 점수 업데이트
+        rankingService.updatePlayScore("music", musicId);
     }
 }
