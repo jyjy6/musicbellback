@@ -6,6 +6,7 @@ import MusicBellBackEnd.MusicBellBackEnd.Auth.CustomUserDetails;
 import MusicBellBackEnd.MusicBellBackEnd.GlobalErrorHandler.GlobalException;
 import MusicBellBackEnd.MusicBellBackEnd.Music.Dto.*;
 import MusicBellBackEnd.MusicBellBackEnd.Redis.RankingService;
+import MusicBellBackEnd.MusicBellBackEnd.Redis.RecentPlayService;
 import MusicBellBackEnd.MusicBellBackEnd.Redis.RedisService;
 import MusicBellBackEnd.MusicBellBackEnd.Redis.PlaylistService;
 import lombok.RequiredArgsConstructor;
@@ -39,6 +40,7 @@ public class MusicService {
     private final RedisService redisService;
     private final RankingService rankingService;
     private final PlaylistService playlistService;
+    private final RecentPlayService recentPlayService;
 
 
     @Value("${spring.cloud.aws.s3.bucket}")
@@ -89,12 +91,15 @@ public class MusicService {
 
         //추후 Kafka로 비동기처리
         this.incrementPlayCount(id);
+
         
         // 로그인된 사용자의 플레이리스트에 자동 추가
         if(auth != null && auth.isAuthenticated()){
             try {
                 Long userId = ((CustomUserDetails) auth.getPrincipal()).getId();
                 playlistService.addToPlaylist(userId, music.getId(), music.getTitle(), music.getMusicUrl());
+                //레디스 최근재생목록 추가(추후 Kafka 비동기처리 고려)
+                recentPlayService.addRecentPlay(userId, music.getId(), music.getTitle(), music.getAlbumImageUrl(), music.getArtist(), music.getDuration());
                 log.info("사용자 ID {}의 플레이리스트에 음악 ID {} 추가됨", userId, music.getId());
             } catch (Exception e) {
                 log.warn("플레이리스트 추가 중 오류 발생: {}", e.getMessage());
@@ -322,6 +327,7 @@ public class MusicService {
 
         // Redis 캐시 업데이트
         redisService.incrementHashValue("music:stats:" + musicId, "playCount", 1);
+
 
         // 랭킹 점수 업데이트
         rankingService.updatePlayScore("music", musicId);

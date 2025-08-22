@@ -3,8 +3,7 @@ package MusicBellBackEnd.MusicBellBackEnd.Music;
 import MusicBellBackEnd.MusicBellBackEnd.Auth.CustomUserDetails;
 import MusicBellBackEnd.MusicBellBackEnd.GlobalErrorHandler.GlobalException;
 import MusicBellBackEnd.MusicBellBackEnd.Music.Dto.*;
-import MusicBellBackEnd.MusicBellBackEnd.Redis.PlaylistService;
-import MusicBellBackEnd.MusicBellBackEnd.Redis.PlaylistItem;
+import MusicBellBackEnd.MusicBellBackEnd.Redis.*;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -29,7 +28,8 @@ public class MusicController {
     private final PlaylistService playlistService;
     @Value("${spring.cloud.aws.s3.bucket}")
     private String bucket;
-
+    private final RankingService rankingService;
+    private final RecentPlayService recentPlayService;
     // Presigned URL 생성 (음악 파일 및 이미지)
     @GetMapping("/presigned-url")
     public ResponseEntity<PresignedUrlResponseDto> getPresignedUrl(
@@ -363,6 +363,40 @@ public class MusicController {
         boolean isInPlaylist = playlistService.isInPlaylist(userId, musicId);
         
         return ResponseEntity.ok(Map.of("isInPlaylist", isInPlaylist));
+    }
+
+    @GetMapping("/ranking")
+    public ResponseEntity<List<Long>> getRanking(
+            @RequestParam(defaultValue = "music") String table,
+            @RequestParam(defaultValue = "daily") String period,
+            @RequestParam(defaultValue = "10") int limit) {
+
+        List<Long> topMusics = rankingService.getTop(table, period, limit);
+        log.info(topMusics.toString());
+        return ResponseEntity.ok(topMusics);
+    }
+
+    @GetMapping("/recent")
+    public ResponseEntity<?> getRecentPlay(Authentication auth) {
+        if (auth != null && auth.isAuthenticated() && auth.getPrincipal() instanceof CustomUserDetails) {
+            Long userId = ((CustomUserDetails) auth.getPrincipal()).getId();
+            List<RecentPlayItem> recentPlays = recentPlayService.getRecentPlays(userId);
+            return ResponseEntity.ok(recentPlays);
+        }
+
+        // 로그인 안 된 경우 아무 동작 안 함 (204 No Content or 401 Unauthorized 등 선택 가능)
+        return ResponseEntity.noContent().build();
+    }
+
+    @DeleteMapping("/recent")
+    public ResponseEntity<?> clearRecentPlay(Authentication auth) {
+        if (auth != null && auth.isAuthenticated() && auth.getPrincipal() instanceof CustomUserDetails) {
+            Long userId = ((CustomUserDetails) auth.getPrincipal()).getId();
+            recentPlayService.clearRecentPlays(userId);
+            return ResponseEntity.ok().build();
+        }
+
+        return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
     }
 }
 

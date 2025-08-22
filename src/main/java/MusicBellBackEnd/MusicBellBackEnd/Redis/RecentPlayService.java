@@ -7,6 +7,7 @@ import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -19,6 +20,7 @@ import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class RecentPlayService {
 
     private final RedisService redisService;
@@ -30,17 +32,25 @@ public class RecentPlayService {
     /**
      * 최근 본 항목 추가 (Redis List 직접 활용)
      */
+
+
+
     @Transactional
-    public void addRecentPLAY(Long userId, Long musicId, String musicUrl) {
+    public void addRecentPlay(Long userId, Long musicId, String title, String albumImageUrl, String artist, Integer duration) {
         String key = RECENT_PLAY_KEY + userId;
 
         try {
-            // RecentPLAYItem 객체를 JSON 문자열로 변환
-            RecentPLAYItem item = new RecentPLAYItem(musicId, musicUrl);
+            // RecentPlayItem 객체를 JSON 문자열로 변환
+            RecentPlayItem item = new RecentPlayItem(musicId, title, albumImageUrl, artist, duration);
             String jsonValue = objectMapper.writeValueAsString(item);
 
             // 기존 동일한 musicId 항목 제거 (중복 방지)
-            removeExistingItem(key, musicId);
+            try {
+                removeExistingItem(key, musicId);
+            } catch (Exception e) {
+                // 기존 항목 제거 실패해도 계속 진행
+                log.warn("기존 항목 제거 중 오류 발생: {}", e.getMessage());
+            }
 
             // 맨 앞에 추가
             redisService.leftPush(key, jsonValue);
@@ -65,8 +75,8 @@ public class RecentPlayService {
         if (allItems != null) {
             for (Object item : allItems) {
                 try {
-                    RecentPLAYItem recentItem = objectMapper.readValue(item.toString(), RecentPLAYItem.class);
-                    if (recentItem.getMusicId().equals(musicId)) {
+                    RecentPlayItem recentItem = objectMapper.readValue(item.toString(), RecentPlayItem.class);
+                    if (recentItem.getId().equals(musicId)) {
                         redisService.removeFromList(key, 0, item.toString());
                         break;
                     }
@@ -78,7 +88,7 @@ public class RecentPlayService {
         }
     }
 
-    public List<RecentPLAYItem> getRecentPLAYs(Long userId) {
+    public List<RecentPlayItem> getRecentPlays(Long userId) {
         String key = RECENT_PLAY_KEY + userId;
         List<Object> result = redisService.getListRange(key, 0, MAX_RECENT_ITEMS - 1);
 
@@ -89,7 +99,7 @@ public class RecentPlayService {
         return result.stream()
                 .map(item -> {
                     try {
-                        return objectMapper.readValue(item.toString(), RecentPLAYItem.class);
+                        return objectMapper.readValue(item.toString(), RecentPlayItem.class);
                     } catch (JsonProcessingException e) {
                         return null; // 파싱 실패한 항목은 null로 처리
                     }
@@ -102,7 +112,7 @@ public class RecentPlayService {
     /**
      * 사용자의 최근 본 항목 전체 삭제
      */
-    public void clearRecentPLAYs(Long userId) {
+    public void clearRecentPlays(Long userId) {
         String key = RECENT_PLAY_KEY + userId;
         redisService.deleteValue(key);
     }
@@ -110,14 +120,14 @@ public class RecentPlayService {
     /**
      * 최근 본 항목 개수 조회
      */
-    public int getRecentPLAYCount(Long userId) {
-        return getRecentPLAYs(userId).size();
+    public int getRecentPlayCount(Long userId) {
+        return getRecentPlays(userId).size();
     }
 
     /**
      * 배치로 여러 항목 추가 (성능 최적화)
      */
-    public void addMultipleRecentPLAYs(Long userId, List<Long> musicIds) {
+    public void addMultipleRecentPlays(Long userId, List<Long> musicIds) {
         String key = RECENT_PLAY_KEY + userId;
 
         for (Long musicId : musicIds) {
@@ -137,11 +147,3 @@ public class RecentPlayService {
 
 
 
-@Data
-@AllArgsConstructor
-@NoArgsConstructor
-class RecentPLAYItem {
-    
-    private Long musicId;
-    private String musicUrl;
-}

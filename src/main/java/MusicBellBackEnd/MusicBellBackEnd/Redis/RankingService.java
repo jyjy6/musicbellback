@@ -124,9 +124,10 @@ public class RankingService {
 
     private String getRankingKey(String period) {
         return switch (period.toLowerCase()) {
-            case "daily" -> DAILY_RANKING_KEY + LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd"));
-            case "weekly" -> WEEKLY_RANKING_KEY + getWeekKey();
-            default -> DAILY_RANKING_KEY + LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd"));
+            case "daily" -> "music:" + DAILY_RANKING_KEY + LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd"));
+            case "weekly" -> "music:" + WEEKLY_RANKING_KEY + getWeekKey();
+            case "monthly" -> "music:" + MONTHLY_RANKING_KEY + getMonthKey();
+            default -> "music:" + DAILY_RANKING_KEY + LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd"));
         };
     }
 
