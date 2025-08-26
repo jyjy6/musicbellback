@@ -70,4 +70,7 @@ public interface ArtistRepository extends JpaRepository<ArtistEntity, Long> {
                                     @Param("country") String country,
                                     @Param("isVerified") Boolean isVerified,
                                     Pageable pageable);
+    
+    // 활성 아티스트 개수 조회
+    long countByIsActiveTrue();
 }

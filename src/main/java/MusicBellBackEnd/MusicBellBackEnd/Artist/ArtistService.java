@@ -1,6 +1,9 @@
 package MusicBellBackEnd.MusicBellBackEnd.Artist;
 
-import MusicBellBackEnd.MusicBellBackEnd.Artist.Dto.*;
+import MusicBellBackEnd.MusicBellBackEnd.Artist.Dto.ArtistPageResponseDto;
+import MusicBellBackEnd.MusicBellBackEnd.Artist.Dto.ArtistRequestDto;
+import MusicBellBackEnd.MusicBellBackEnd.Artist.Dto.ArtistResponseDto;
+import MusicBellBackEnd.MusicBellBackEnd.Artist.Dto.ArtistSearchDto;
 import MusicBellBackEnd.MusicBellBackEnd.GlobalErrorHandler.GlobalException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
