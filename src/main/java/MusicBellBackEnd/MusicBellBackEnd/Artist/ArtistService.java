@@ -4,6 +4,7 @@ import MusicBellBackEnd.MusicBellBackEnd.Artist.Dto.ArtistPageResponseDto;
 import MusicBellBackEnd.MusicBellBackEnd.Artist.Dto.ArtistRequestDto;
 import MusicBellBackEnd.MusicBellBackEnd.Artist.Dto.ArtistResponseDto;
 import MusicBellBackEnd.MusicBellBackEnd.Artist.Dto.ArtistSearchDto;
+import MusicBellBackEnd.MusicBellBackEnd.Artist.ElasticSearch.ArtistSyncService;
 import MusicBellBackEnd.MusicBellBackEnd.GlobalErrorHandler.GlobalException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -25,6 +26,7 @@ import java.util.stream.Collectors;
 public class ArtistService {
     
     private final ArtistRepository artistRepository;
+    private final ArtistSyncService artistSyncService;
     
     /**
      * 아티스트명으로 찾기 또는 새로 생성
@@ -103,6 +105,14 @@ public class ArtistService {
         if (likeCountDelta != null && likeCountDelta != 0) {
             artistRepository.updateTotalLikeCount(artistId, likeCountDelta);
         }
+        
+        // ElasticSearch 동기화 (통계 업데이트 후)
+        try {
+            artistSyncService.syncArtistStats(artistId);
+        } catch (Exception e) {
+            log.warn("아티스트 통계 ES 동기화 실패: artistId={}, error={}", artistId, e.getMessage());
+            // ES 동기화 실패해도 메인 로직은 계속 진행
+        }
     }
     
     /**
@@ -157,6 +167,9 @@ public class ArtistService {
 
         ArtistEntity savedArtist = artistRepository.save(artistEntity);
         log.info("아티스트 생성 완료: {} (ID: {})", savedArtist.getName(), savedArtist.getId());
+
+        //ES 저장
+        artistSyncService.syncSingleArtist(savedArtist.getId());
 
         return convertToResponseDto(savedArtist);
     }
@@ -237,6 +250,9 @@ public class ArtistService {
         // 업데이트
         updateArtistEntity(artist, requestDto);
         ArtistEntity savedArtist = artistRepository.save(artist);
+
+        //ES 저장
+        artistSyncService.syncSingleArtist(id);
 
         log.info("아티스트 ID {} 정보가 수정되었습니다.", id);
         return convertToResponseDto(savedArtist);

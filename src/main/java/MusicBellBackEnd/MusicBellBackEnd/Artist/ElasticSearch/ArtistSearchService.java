@@ -24,7 +24,6 @@ import java.util.stream.Collectors;
 @Slf4j
 public class ArtistSearchService {
 
-    private final ArtistSearchRepository artistSearchRepository;
     private final ElasticsearchTemplate elasticsearchTemplate;
 
     /**
@@ -73,8 +72,6 @@ public class ArtistSearchService {
                         }
 
                         // must 조건들 (AND 필터)
-                        // 활성 아티스트만 검색
-                        b.must(m -> m.term(t -> t.field("isActive").value(true)));
                         
                         if (genre != null) {
                             b.must(m -> m.term(t -> t.field("genre").value(genre)));
@@ -130,7 +127,6 @@ public class ArtistSearchService {
             Query query = NativeQuery.builder()
                     .withQuery(q -> q.bool(b -> b
                             .must(m -> m.term(t -> t.field("genre").value(genre)))
-                            .must(m -> m.term(t -> t.field("isActive").value(true)))
                     ))
                     .withSort(Sort.by(Sort.Direction.DESC, "popularityScore"))
                     .withSort(Sort.by(Sort.Direction.DESC, "followerCount"))
@@ -159,7 +155,6 @@ public class ArtistSearchService {
 
             Query query = NativeQuery.builder()
                     .withQuery(q -> q.bool(b -> b
-                            .must(m -> m.term(t -> t.field("isActive").value(true)))
                     ))
                     .withSort(Sort.by(Sort.Direction.DESC, "popularityScore"))
                     .withSort(Sort.by(Sort.Direction.DESC, "followerCount"))
@@ -189,7 +184,6 @@ public class ArtistSearchService {
             Query query = NativeQuery.builder()
                     .withQuery(q -> q.bool(b -> b
                             .must(m -> m.term(t -> t.field("isVerified").value(true)))
-                            .must(m -> m.term(t -> t.field("isActive").value(true)))
                     ))
                     .withSort(Sort.by(Sort.Direction.DESC, "followerCount"))
                     .withSort(Sort.by(Sort.Direction.DESC, "popularityScore"))
@@ -218,7 +212,6 @@ public class ArtistSearchService {
 
             Query query = NativeQuery.builder()
                     .withQuery(q -> q.bool(b -> b
-                            .must(m -> m.term(t -> t.field("isActive").value(true)))
                     ))
                     .withSort(Sort.by(Sort.Direction.DESC, "createdAt"))
                     .withPageable(pageable)
@@ -247,7 +240,6 @@ public class ArtistSearchService {
             Query query = NativeQuery.builder()
                     .withQuery(q -> q.bool(b -> b
                             .must(m -> m.term(t -> t.field("country").value(country)))
-                            .must(m -> m.term(t -> t.field("isActive").value(true)))
                     ))
                     .withSort(Sort.by(Sort.Direction.DESC, "popularityScore"))
                     .withSort(Sort.by(Sort.Direction.DESC, "followerCount"))
@@ -278,7 +270,6 @@ public class ArtistSearchService {
                                     .field("name")
                                     .value(prefix.toLowerCase())
                             ))
-                            .must(m -> m.term(t -> t.field("isActive").value(true)))
                     ))
                     .withSort(Sort.by(Sort.Direction.DESC, "popularityScore"))
                     .withMaxResults(size)
@@ -304,7 +295,6 @@ public class ArtistSearchService {
             // 이 부분은 집계 쿼리로 구현할 수 있지만, 간단히 모든 활성 아티스트를 가져와서 처리
             Query query = NativeQuery.builder()
                     .withQuery(q -> q.bool(b -> b
-                            .must(m -> m.term(t -> t.field("isActive").value(true)))
                     ))
                     .withMaxResults(10000) // 충분히 큰 수
                     .build();

@@ -398,5 +398,38 @@ public class MusicController {
 
         return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
     }
+
+    // 재생 카운트만 증가 (플레이리스트 재생용 경량 API)
+    @PostMapping("/{id}/play")
+    public ResponseEntity<Map<String, String>> incrementPlayCount(
+            @PathVariable Long id,
+            Authentication auth
+    ) {
+        try {
+            // 재생 카운트 증가
+            musicService.incrementPlayCount(id);
+            
+            // 로그인된 사용자의 경우 최근 재생 목록에 추가
+            if (auth != null && auth.isAuthenticated() && auth.getPrincipal() instanceof CustomUserDetails) {
+                try {
+                    Long userId = ((CustomUserDetails) auth.getPrincipal()).getId();
+                    // 음악 기본 정보만 가져오기 (재생 카운트 중복 증가 방지)
+                    MusicResponseDto music = musicService.getMusicByIdWithoutIncrement(id);
+                    recentPlayService.addRecentPlay(userId, music.getId(), music.getTitle(), 
+                            music.getAlbumImageUrl(), music.getArtist(), music.getDuration());
+                    log.info("사용자 ID {}의 최근 재생 목록에 음악 ID {} 추가됨", userId, id);
+                } catch (Exception e) {
+                    log.warn("최근 재생 목록 추가 중 오류 발생: {}", e.getMessage());
+                    // 최근 재생 목록 추가 실패해도 재생 카운트 증가는 정상 진행
+                }
+            }
+            
+            log.info("음악 ID {} 재생 카운트가 증가되었습니다.", id);
+            return ResponseEntity.ok(Map.of("message", "재생 카운트가 증가되었습니다."));
+        } catch (Exception e) {
+            log.error("재생 카운트 증가 실패: {}", e.getMessage());
+            throw new GlobalException("재생 카운트 증가에 실패했습니다.", "PLAY_COUNT_INCREMENT_FAILED", HttpStatus.INTERNAL_SERVER_ERROR);
+        }
+    }
 }
 

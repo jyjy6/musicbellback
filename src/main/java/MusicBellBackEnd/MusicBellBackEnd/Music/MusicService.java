@@ -110,6 +110,14 @@ public class MusicService {
         return convertToResponseDto(music);
     }
 
+    // 음악 정보만 조회 (재생 카운트 증가 없음)
+    public MusicResponseDto getMusicByIdWithoutIncrement(Long id) {
+        MusicEntity music = musicRepository.findById(id)
+                .orElseThrow(() -> new GlobalException("음악을 찾을 수 없습니다.", "MUSIC_NOT_FOUND", HttpStatus.NOT_FOUND));
+
+        return convertToResponseDto(music);
+    }
+
     // 음악 목록 조회 (페이징)
     public MusicPageResponseDto getAllMusics(int page, int size, String sortBy, String sortOrder) {
         try {
@@ -194,16 +202,29 @@ public class MusicService {
     // 좋아요 토글
     @Transactional
     public boolean toggleLike(Long id, boolean isLike) {
-        if (!musicRepository.existsById(id)) {
-            throw new GlobalException("음악을 찾을 수 없습니다.", "MUSIC_NOT_FOUND", HttpStatus.NOT_FOUND);
-        }
+        MusicEntity music = musicRepository.findById(id)
+                .orElseThrow(() -> new GlobalException("음악을 찾을 수 없습니다.", "MUSIC_NOT_FOUND", HttpStatus.NOT_FOUND));
         
         if (isLike) {
             musicRepository.incrementLikeCount(id);
             log.info("음악 ID {} 좋아요가 증가되었습니다.", id);
+            
+            // 아티스트 totalLikeCount 증가
+            if (music.getArtistEntity() != null) {
+                Long artistId = music.getArtistEntity().getId();
+                artistService.updateArtistStats(artistId, null, 1L);
+                log.info("아티스트 ID {} 좋아요가 증가되었습니다.", artistId);
+            }
         } else {
             musicRepository.decrementLikeCount(id);
             log.info("음악 ID {} 좋아요가 감소되었습니다.", id);
+            
+            // 아티스트 totalLikeCount 감소
+            if (music.getArtistEntity() != null) {
+                Long artistId = music.getArtistEntity().getId();
+                artistService.updateArtistStats(artistId, null, -1L);
+                log.info("아티스트 ID {} 좋아요가 감소되었습니다.", artistId);
+            }
         }
         
         return isLike;
@@ -325,10 +346,16 @@ public class MusicService {
         music.setPlayCount(music.getPlayCount() + 1);
         musicRepository.save(music);
 
+        // 아티스트 totalPlayCount 증가
+        if (music.getArtistEntity() != null) {
+            Long artistId = music.getArtistEntity().getId();
+            artistService.updateArtistStats(artistId, 1L, null);
+            log.info("아티스트 ID {} 재생수가 증가되었습니다.", artistId);
+        }
+
         // Redis 캐시 업데이트
         redisService.incrementHashValue("music:stats:" + musicId, "playCount", 1);
-
-
+        
         // 랭킹 점수 업데이트
         rankingService.updatePlayScore("music", musicId);
     }
