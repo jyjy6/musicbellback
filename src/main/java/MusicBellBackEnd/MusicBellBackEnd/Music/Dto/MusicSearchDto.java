@@ -10,7 +10,7 @@ import lombok.*;
 public class MusicSearchDto {
     
     private String title;
-    private String artist;
+    private Long artist;
     private String album;
     private String genre;
     private String uploaderName;

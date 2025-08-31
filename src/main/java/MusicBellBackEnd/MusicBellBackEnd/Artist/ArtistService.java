@@ -35,7 +35,7 @@ public class ArtistService {
     @Transactional
     public ArtistEntity findOrCreateArtist(String artistName) {
         if (artistName == null || artistName.trim().isEmpty()) {
-            throw new GlobalException("아티스트명은 필수입니다.", "ARTISTNAME_NEEDED_ERROR");
+            throw new GlobalException("아티스트명은 필수입니다.", "ARTISTNAME_NEEDED_ERROR", HttpStatus.BAD_REQUEST);
         }
         
         String trimmedName = artistName.trim();
@@ -75,6 +75,9 @@ public class ArtistService {
                 
         ArtistEntity savedArtist = artistRepository.save(newArtist);
         log.info("새 아티스트 생성: {} (ID: {})", trimmedName, savedArtist.getId());
+
+        //추후 Kafka처리
+        artistSyncService.syncSingleArtist(savedArtist.getId());
         
         return savedArtist;
     }
@@ -84,7 +87,10 @@ public class ArtistService {
      */
     public List<ArtistEntity> findSimilarArtists(String partialName, int limit) {
         if (partialName == null || partialName.trim().length() < 2) {
-            return List.of();
+            throw new GlobalException("검색어는 최소 2글자 이상이어야 합니다.", "SEARCH_TERM_TOO_SHORT", HttpStatus.BAD_REQUEST);
+        }
+        if (limit <= 0 || limit > 50) {
+            throw new GlobalException("결과 제한은 1-50 사이여야 합니다.", "INVALID_LIMIT", HttpStatus.BAD_REQUEST);
         }
         
         List<ArtistEntity> similar = artistRepository.findByNameContainingIgnoreCase(partialName.trim());
@@ -99,6 +105,15 @@ public class ArtistService {
      */
     @Transactional
     public void updateArtistStats(Long artistId, Long playCountDelta, Long likeCountDelta) {
+        if (artistId == null) {
+            throw new GlobalException("아티스트 ID는 필수입니다.", "ARTIST_ID_REQUIRED", HttpStatus.BAD_REQUEST);
+        }
+        
+        // 아티스트 존재 여부 확인
+        if (!artistRepository.existsById(artistId)) {
+            throw new GlobalException("존재하지 않는 아티스트입니다.", "ARTIST_NOT_FOUND", HttpStatus.NOT_FOUND);
+        }
+        
         if (playCountDelta != null && playCountDelta != 0) {
             artistRepository.updateTotalPlayCount(artistId, playCountDelta);
         }
@@ -141,7 +156,7 @@ public class ArtistService {
 
         // 중복 체크
         if (artistRepository.existsByNameIgnoreCase(requestDto.getName())) {
-            throw new IllegalArgumentException("이미 등록된 아티스트명입니다: " + requestDto.getName());
+            throw new GlobalException("이미 등록된 아티스트명입니다: " + requestDto.getName(), "ARTIST_NAME_DUPLICATE", HttpStatus.CONFLICT);
         }
 
         // 엔티티 생성
@@ -168,8 +183,13 @@ public class ArtistService {
         ArtistEntity savedArtist = artistRepository.save(artistEntity);
         log.info("아티스트 생성 완료: {} (ID: {})", savedArtist.getName(), savedArtist.getId());
 
-        //ES 저장
-        artistSyncService.syncSingleArtist(savedArtist.getId());
+        // ES 동기화
+        try {
+            artistSyncService.syncSingleArtist(savedArtist.getId());
+        } catch (Exception e) {
+            log.warn("아티스트 생성 후 ES 동기화 실패: artistId={}, error={}", savedArtist.getId(), e.getMessage());
+            // ES 동기화 실패해도 메인 로직은 계속 진행
+        }
 
         return convertToResponseDto(savedArtist);
     }
@@ -189,6 +209,14 @@ public class ArtistService {
      */
     public ArtistPageResponseDto getAllArtists(int page, int size, String sortBy, String sortOrder) {
         try {
+            // 입력 검증
+            if (page < 0) {
+                throw new GlobalException("페이지 번호는 0 이상이어야 합니다.", "INVALID_PAGE_NUMBER", HttpStatus.BAD_REQUEST);
+            }
+            if (size <= 0 || size > 100) {
+                throw new GlobalException("페이지 크기는 1-100 사이여야 합니다.", "INVALID_PAGE_SIZE", HttpStatus.BAD_REQUEST);
+            }
+            
             Sort.Direction direction = "asc".equalsIgnoreCase(sortOrder)
                     ? Sort.Direction.ASC
                     : Sort.Direction.DESC;
@@ -197,6 +225,8 @@ public class ArtistService {
             Page<ArtistEntity> artistPage = artistRepository.findByIsActiveTrueOrderByNameAsc(pageable);
 
             return convertToPageResponseDto(artistPage);
+        } catch (GlobalException e) {
+            throw e;
         } catch (Exception e) {
             log.error("아티스트 목록 조회 중 오류 발생: {}", e.getMessage());
             throw new GlobalException("아티스트 목록 조회에 실패했습니다.", "ARTIST_LIST_FAILED", HttpStatus.INTERNAL_SERVER_ERROR);
@@ -208,6 +238,14 @@ public class ArtistService {
      */
     public ArtistPageResponseDto searchArtists(ArtistSearchDto searchDto) {
         try {
+            // 입력 검증
+            if (searchDto.getPage() < 0) {
+                throw new GlobalException("페이지 번호는 0 이상이어야 합니다.", "INVALID_PAGE_NUMBER", HttpStatus.BAD_REQUEST);
+            }
+            if (searchDto.getSize() <= 0 || searchDto.getSize() > 100) {
+                throw new GlobalException("페이지 크기는 1-100 사이여야 합니다.", "INVALID_PAGE_SIZE", HttpStatus.BAD_REQUEST);
+            }
+            
             Sort.Direction direction = "asc".equalsIgnoreCase(searchDto.getSortOrder())
                     ? Sort.Direction.ASC
                     : Sort.Direction.DESC;
@@ -227,6 +265,8 @@ public class ArtistService {
             );
 
             return convertToPageResponseDto(artistPage);
+        } catch (GlobalException e) {
+            throw e;
         } catch (Exception e) {
             log.error("아티스트 검색 중 오류 발생: {}", e.getMessage());
             throw new GlobalException("아티스트 검색에 실패했습니다.", "ARTIST_SEARCH_FAILED", HttpStatus.INTERNAL_SERVER_ERROR);
@@ -244,16 +284,18 @@ public class ArtistService {
         // 이름 변경 시 중복 체크
         if (!artist.getName().equalsIgnoreCase(requestDto.getName()) && 
             artistRepository.existsByNameIgnoreCase(requestDto.getName())) {
-            throw new IllegalArgumentException("이미 등록된 아티스트명입니다: " + requestDto.getName());
+            throw new GlobalException("이미 등록된 아티스트명입니다: " + requestDto.getName(), "ARTIST_NAME_DUPLICATE", HttpStatus.CONFLICT);
         }
-
         // 업데이트
         updateArtistEntity(artist, requestDto);
         ArtistEntity savedArtist = artistRepository.save(artist);
-
-        //ES 저장
-        artistSyncService.syncSingleArtist(id);
-
+        // ES 동기화 추후Kafka
+        try {
+            artistSyncService.syncSingleArtist(id);
+        } catch (Exception e) {
+            log.warn("아티스트 수정 후 ES 동기화 실패: artistId={}, error={}", id, e.getMessage());
+            // ES 동기화 실패해도 메인 로직은 계속 진행
+        }
         log.info("아티스트 ID {} 정보가 수정되었습니다.", id);
         return convertToResponseDto(savedArtist);
     }
@@ -306,30 +348,47 @@ public class ArtistService {
      * 아티스트 자동완성 제안
      */
     public List<ArtistResponseDto> getArtistSuggestions(String query, int limit) {
-        List<ArtistEntity> suggestions = findSimilarArtists(query, limit);
-        return suggestions.stream()
-                .map(this::convertToResponseDto)
-                .collect(Collectors.toList());
+        try {
+            List<ArtistEntity> suggestions = findSimilarArtists(query, limit);
+            return suggestions.stream()
+                    .map(this::convertToResponseDto)
+                    .collect(Collectors.toList());
+        } catch (GlobalException e) {
+            throw e;
+        } catch (Exception e) {
+            log.error("아티스트 자동완성 조회 중 오류 발생: {}", e.getMessage());
+            throw new GlobalException("아티스트 자동완성 조회에 실패했습니다.", "ARTIST_SUGGESTIONS_FAILED", HttpStatus.INTERNAL_SERVER_ERROR);
+        }
     }
 
     /**
      * 인기 아티스트 조회
      */
     public List<ArtistResponseDto> getPopularArtists() {
-        List<ArtistEntity> popularArtists = artistRepository.findTop10ByIsActiveTrueOrderByFollowerCountDesc();
-        return popularArtists.stream()
-                .map(this::convertToResponseDto)
-                .collect(Collectors.toList());
+        try {
+            List<ArtistEntity> popularArtists = artistRepository.findTop10ByIsActiveTrueOrderByFollowerCountDesc();
+            return popularArtists.stream()
+                    .map(this::convertToResponseDto)
+                    .collect(Collectors.toList());
+        } catch (Exception e) {
+            log.error("인기 아티스트 조회 중 오류 발생: {}", e.getMessage());
+            throw new GlobalException("인기 아티스트 조회에 실패했습니다.", "POPULAR_ARTISTS_FAILED", HttpStatus.INTERNAL_SERVER_ERROR);
+        }
     }
 
     /**
      * 최신 아티스트 조회
      */
     public List<ArtistResponseDto> getLatestArtists() {
-        List<ArtistEntity> latestArtists = artistRepository.findTop10ByIsActiveTrueOrderByCreatedAtDesc();
-        return latestArtists.stream()
-                .map(this::convertToResponseDto)
-                .collect(Collectors.toList());
+        try {
+            List<ArtistEntity> latestArtists = artistRepository.findTop10ByIsActiveTrueOrderByCreatedAtDesc();
+            return latestArtists.stream()
+                    .map(this::convertToResponseDto)
+                    .collect(Collectors.toList());
+        } catch (Exception e) {
+            log.error("최신 아티스트 조회 중 오류 발생: {}", e.getMessage());
+            throw new GlobalException("최신 아티스트 조회에 실패했습니다.", "LATEST_ARTISTS_FAILED", HttpStatus.INTERNAL_SERVER_ERROR);
+        }
     }
 
     // === 변환 메소드들 ===
@@ -393,13 +452,13 @@ public class ArtistService {
 
     private void validateArtistRequest(ArtistRequestDto requestDto) {
         if (requestDto.getName() == null || requestDto.getName().trim().isEmpty()) {
-            throw new IllegalArgumentException("아티스트명은 필수입니다.");
+            throw new GlobalException("아티스트명은 필수입니다.", "ARTIST_NAME_REQUIRED", HttpStatus.BAD_REQUEST);
         }
         if (requestDto.getName().trim().length() < 2) {
-            throw new IllegalArgumentException("아티스트명은 최소 2글자 이상이어야 합니다.");
+            throw new GlobalException("아티스트명은 최소 2글자 이상이어야 합니다.", "ARTIST_NAME_TOO_SHORT", HttpStatus.BAD_REQUEST);
         }
         if (requestDto.getName().trim().length() > 200) {
-            throw new IllegalArgumentException("아티스트명은 200글자를 초과할 수 없습니다.");
+            throw new GlobalException("아티스트명은 200글자를 초과할 수 없습니다.", "ARTIST_NAME_TOO_LONG", HttpStatus.BAD_REQUEST);
         }
     }
 }

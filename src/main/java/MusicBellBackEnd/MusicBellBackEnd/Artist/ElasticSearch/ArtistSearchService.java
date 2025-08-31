@@ -13,7 +13,9 @@ import org.springframework.data.elasticsearch.client.elc.NativeQuery;
 import org.springframework.data.elasticsearch.core.SearchHit;
 import org.springframework.data.elasticsearch.core.SearchHits;
 import org.springframework.data.elasticsearch.core.query.Query;
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
+import MusicBellBackEnd.MusicBellBackEnd.GlobalErrorHandler.GlobalException;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -35,6 +37,14 @@ public class ArtistSearchService {
      */
     public Page<ArtistDocument> smartSearch(String keyword, String genre, String country, Boolean isVerified, int page, int size) {
         try {
+            // 입력 검증
+            if (page < 0) {
+                throw new GlobalException("페이지 번호는 0 이상이어야 합니다.", "INVALID_PAGE_NUMBER", HttpStatus.BAD_REQUEST);
+            }
+            if (size <= 0 || size > 100) {
+                throw new GlobalException("페이지 크기는 1-100 사이여야 합니다.", "INVALID_PAGE_SIZE", HttpStatus.BAD_REQUEST);
+            }
+            
             log.info("🚀 아티스트 검색 시작: keyword={}, genre={}, country={}, verified={}, page={}, size={}", 
                     keyword, genre, country, isVerified, page, size);
             
@@ -109,9 +119,11 @@ public class ArtistSearchService {
             
             return resultPage;
 
+        } catch (GlobalException e) {
+            throw e;
         } catch (Exception e) {
             log.error("🚨 아티스트 검색 실패: ", e);
-            return new PageImpl<>(new ArrayList<>(), PageRequest.of(page, size), 0);
+            throw new GlobalException("아티스트 검색 중 오류가 발생했습니다.", "ARTIST_SEARCH_ERROR", HttpStatus.INTERNAL_SERVER_ERROR);
         }
     }
 
@@ -120,6 +132,16 @@ public class ArtistSearchService {
      */
     public Page<ArtistDocument> searchByGenre(String genre, int page, int size) {
         try {
+            if (genre == null || genre.trim().isEmpty()) {
+                throw new GlobalException("장르는 필수입니다.", "GENRE_REQUIRED", HttpStatus.BAD_REQUEST);
+            }
+            if (page < 0) {
+                throw new GlobalException("페이지 번호는 0 이상이어야 합니다.", "INVALID_PAGE_NUMBER", HttpStatus.BAD_REQUEST);
+            }
+            if (size <= 0 || size > 100) {
+                throw new GlobalException("페이지 크기는 1-100 사이여야 합니다.", "INVALID_PAGE_SIZE", HttpStatus.BAD_REQUEST);
+            }
+            
             log.info("🎵 장르별 검색: {}, page={}, size={}", genre, page, size);
 
             Pageable pageable = PageRequest.of(page, size);
@@ -140,9 +162,11 @@ public class ArtistSearchService {
 
             return new PageImpl<>(results, pageable, searchHits.getTotalHits());
 
+        } catch (GlobalException e) {
+            throw e;
         } catch (Exception e) {
             log.error("🚨 장르별 검색 실패: ", e);
-            return new PageImpl<>(new ArrayList<>(), PageRequest.of(page, size), 0);
+            throw new GlobalException("장르별 검색 중 오류가 발생했습니다.", "GENRE_SEARCH_ERROR", HttpStatus.INTERNAL_SERVER_ERROR);
         }
     }
 
@@ -151,6 +175,13 @@ public class ArtistSearchService {
      */
     public Page<ArtistDocument> getPopularArtists(int page, int size) {
         try {
+            if (page < 0) {
+                throw new GlobalException("페이지 번호는 0 이상이어야 합니다.", "INVALID_PAGE_NUMBER", HttpStatus.BAD_REQUEST);
+            }
+            if (size <= 0 || size > 100) {
+                throw new GlobalException("페이지 크기는 1-100 사이여야 합니다.", "INVALID_PAGE_SIZE", HttpStatus.BAD_REQUEST);
+            }
+            
             Pageable pageable = PageRequest.of(page, size);
 
             Query query = NativeQuery.builder()
@@ -168,9 +199,11 @@ public class ArtistSearchService {
 
             return new PageImpl<>(results, pageable, searchHits.getTotalHits());
 
+        } catch (GlobalException e) {
+            throw e;
         } catch (Exception e) {
             log.error("🚨 인기 아티스트 검색 실패: ", e);
-            return new PageImpl<>(new ArrayList<>(), PageRequest.of(page, size), 0);
+            throw new GlobalException("인기 아티스트 조회 중 오류가 발생했습니다.", "POPULAR_ARTISTS_ERROR", HttpStatus.INTERNAL_SERVER_ERROR);
         }
     }
 
@@ -179,6 +212,13 @@ public class ArtistSearchService {
      */
     public Page<ArtistDocument> getVerifiedArtists(int page, int size) {
         try {
+            if (page < 0) {
+                throw new GlobalException("페이지 번호는 0 이상이어야 합니다.", "INVALID_PAGE_NUMBER", HttpStatus.BAD_REQUEST);
+            }
+            if (size <= 0 || size > 100) {
+                throw new GlobalException("페이지 크기는 1-100 사이여야 합니다.", "INVALID_PAGE_SIZE", HttpStatus.BAD_REQUEST);
+            }
+            
             Pageable pageable = PageRequest.of(page, size);
 
             Query query = NativeQuery.builder()
@@ -197,9 +237,11 @@ public class ArtistSearchService {
 
             return new PageImpl<>(results, pageable, searchHits.getTotalHits());
 
+        } catch (GlobalException e) {
+            throw e;
         } catch (Exception e) {
             log.error("🚨 인증 아티스트 검색 실패: ", e);
-            return new PageImpl<>(new ArrayList<>(), PageRequest.of(page, size), 0);
+            throw new GlobalException("인증 아티스트 조회 중 오류가 발생했습니다.", "VERIFIED_ARTISTS_ERROR", HttpStatus.INTERNAL_SERVER_ERROR);
         }
     }
 
@@ -208,6 +250,13 @@ public class ArtistSearchService {
      */
     public Page<ArtistDocument> getRecentArtists(int page, int size) {
         try {
+            if (page < 0) {
+                throw new GlobalException("페이지 번호는 0 이상이어야 합니다.", "INVALID_PAGE_NUMBER", HttpStatus.BAD_REQUEST);
+            }
+            if (size <= 0 || size > 100) {
+                throw new GlobalException("페이지 크기는 1-100 사이여야 합니다.", "INVALID_PAGE_SIZE", HttpStatus.BAD_REQUEST);
+            }
+            
             Pageable pageable = PageRequest.of(page, size);
 
             Query query = NativeQuery.builder()
@@ -224,9 +273,11 @@ public class ArtistSearchService {
 
             return new PageImpl<>(results, pageable, searchHits.getTotalHits());
 
+        } catch (GlobalException e) {
+            throw e;
         } catch (Exception e) {
             log.error("🚨 신규 아티스트 검색 실패: ", e);
-            return new PageImpl<>(new ArrayList<>(), PageRequest.of(page, size), 0);
+            throw new GlobalException("신규 아티스트 조회 중 오류가 발생했습니다.", "RECENT_ARTISTS_ERROR", HttpStatus.INTERNAL_SERVER_ERROR);
         }
     }
 
@@ -235,6 +286,16 @@ public class ArtistSearchService {
      */
     public Page<ArtistDocument> searchByCountry(String country, int page, int size) {
         try {
+            if (country == null || country.trim().isEmpty()) {
+                throw new GlobalException("국가는 필수입니다.", "COUNTRY_REQUIRED", HttpStatus.BAD_REQUEST);
+            }
+            if (page < 0) {
+                throw new GlobalException("페이지 번호는 0 이상이어야 합니다.", "INVALID_PAGE_NUMBER", HttpStatus.BAD_REQUEST);
+            }
+            if (size <= 0 || size > 100) {
+                throw new GlobalException("페이지 크기는 1-100 사이여야 합니다.", "INVALID_PAGE_SIZE", HttpStatus.BAD_REQUEST);
+            }
+            
             Pageable pageable = PageRequest.of(page, size);
 
             Query query = NativeQuery.builder()
@@ -253,9 +314,11 @@ public class ArtistSearchService {
 
             return new PageImpl<>(results, pageable, searchHits.getTotalHits());
 
+        } catch (GlobalException e) {
+            throw e;
         } catch (Exception e) {
             log.error("🚨 국가별 검색 실패: ", e);
-            return new PageImpl<>(new ArrayList<>(), PageRequest.of(page, size), 0);
+            throw new GlobalException("국가별 검색 중 오류가 발생했습니다.", "COUNTRY_SEARCH_ERROR", HttpStatus.INTERNAL_SERVER_ERROR);
         }
     }
 
@@ -264,6 +327,13 @@ public class ArtistSearchService {
      */
     public List<String> autoComplete(String prefix, int size) {
         try {
+            if (prefix == null || prefix.trim().isEmpty()) {
+                throw new GlobalException("검색어는 필수입니다.", "PREFIX_REQUIRED", HttpStatus.BAD_REQUEST);
+            }
+            if (size <= 0 || size > 50) {
+                throw new GlobalException("결과 크기는 1-50 사이여야 합니다.", "INVALID_SIZE", HttpStatus.BAD_REQUEST);
+            }
+            
             Query query = NativeQuery.builder()
                     .withQuery(q -> q.bool(b -> b
                             .must(m -> m.prefix(p -> p
@@ -281,9 +351,11 @@ public class ArtistSearchService {
                     .distinct()
                     .collect(Collectors.toList());
 
+        } catch (GlobalException e) {
+            throw e;
         } catch (Exception e) {
             log.error("🚨 자동완성 실패: ", e);
-            return new ArrayList<>();
+            throw new GlobalException("자동완성 조회 중 오류가 발생했습니다.", "AUTOCOMPLETE_ERROR", HttpStatus.INTERNAL_SERVER_ERROR);
         }
     }
 
@@ -314,7 +386,7 @@ public class ArtistSearchService {
 
         } catch (Exception e) {
             log.error("🚨 장르별 통계 조회 실패: ", e);
-            return new ArrayList<>();
+            throw new GlobalException("장르별 통계 조회 중 오류가 발생했습니다.", "GENRE_STATS_ERROR", HttpStatus.INTERNAL_SERVER_ERROR);
         }
     }
 

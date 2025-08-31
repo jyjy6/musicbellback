@@ -31,14 +31,14 @@ public interface MusicRepository extends JpaRepository<MusicEntity, Long> {
     // 복합 검색
     @Query("SELECT m FROM MusicEntity m WHERE " +
            "(:title IS NULL OR LOWER(m.title) LIKE LOWER(CONCAT('%', :title, '%'))) AND " +
-           "(:artist IS NULL OR LOWER(m.artist) LIKE LOWER(CONCAT('%', :artist, '%'))) AND " +
+            "(:artist IS NULL OR m.artistEntity.id = :artist) AND " +
            "(:album IS NULL OR LOWER(m.album) LIKE LOWER(CONCAT('%', :album, '%'))) AND " +
            "(:genre IS NULL OR m.genre = :genre) AND " +
            "(:uploaderName IS NULL OR m.uploaderName = :uploaderName) AND " +
            "(:musicGrade IS NULL OR m.musicGrade = :musicGrade) AND " +
            "m.isPublic = true")
     Page<MusicEntity> searchMusic(@Param("title") String title,
-                                  @Param("artist") String artist,
+                                  @Param("artist") Long artist,
                                   @Param("album") String album,
                                   @Param("genre") String genre,
                                   @Param("uploaderName") String uploaderName,

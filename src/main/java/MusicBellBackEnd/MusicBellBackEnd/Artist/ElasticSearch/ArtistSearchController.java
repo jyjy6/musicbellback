@@ -38,7 +38,7 @@ public class ArtistSearchController {
     }
 
 
-    @GetMapping("/genre/{genre}")
+    @GetMapping("/{genre}")
     public ResponseEntity<Page<ArtistDocument>> searchByGenre(
         @PathVariable String genre,
         @RequestParam(defaultValue = "0") int page,

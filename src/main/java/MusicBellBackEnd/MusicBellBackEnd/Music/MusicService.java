@@ -338,6 +338,26 @@ public class MusicService {
         if (dto.getMusicGrade() != null) entity.setMusicGrade(dto.getMusicGrade());
     }
 
+    // 여러 음악 ID로 배치 조회 (랭킹용)
+    public List<MusicResponseDto> getMusicsByIds(List<Long> musicIds) {
+        try {
+            List<MusicEntity> musics = musicRepository.findAllById(musicIds);
+            
+            // 원래 순서 유지를 위해 ID 순서대로 정렬
+            return musicIds.stream()
+                    .map(id -> musics.stream()
+                            .filter(music -> music.getId().equals(id))
+                            .findFirst()
+                            .map(this::convertToResponseDto)
+                            .orElse(null))
+                    .filter(dto -> dto != null)
+                    .collect(Collectors.toList());
+        } catch (Exception e) {
+            log.error("배치 음악 조회 중 오류 발생: {}", e.getMessage());
+            throw new GlobalException("배치 음악 조회에 실패했습니다.", "BATCH_MUSIC_FETCH_FAILED", HttpStatus.INTERNAL_SERVER_ERROR);
+        }
+    }
+
     @Transactional
     public void incrementPlayCount(Long musicId) {
         // DB 업데이트

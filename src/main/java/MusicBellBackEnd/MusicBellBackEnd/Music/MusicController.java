@@ -99,7 +99,7 @@ public class MusicController {
     @GetMapping("/search")
     public ResponseEntity<MusicPageResponseDto> searchMusics(
             @RequestParam(required = false) String title,
-            @RequestParam(required = false) String artist,
+            @RequestParam(required = false) Long artist,
             @RequestParam(required = false) String album,
             @RequestParam(required = false) String genre,
             @RequestParam(required = false) String uploaderName,
@@ -107,7 +107,7 @@ public class MusicController {
             @RequestParam(defaultValue = "createdAt") String sortBy,
             @RequestParam(defaultValue = "desc") String sortOrder,
             @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "20") int size
+            @RequestParam(defaultValue = "5") int size
     ) {
         MusicSearchDto searchDto = MusicSearchDto.builder()
                 .title(title)
@@ -213,6 +213,7 @@ public class MusicController {
         MusicPageResponseDto uploaderMusics = musicService.searchMusics(searchDto);
         return ResponseEntity.ok(uploaderMusics);
     }
+
 
     // 장르별 음악 목록
     @GetMapping("/genre/{genre}")
@@ -374,6 +375,13 @@ public class MusicController {
         List<Long> topMusics = rankingService.getTop(table, period, limit);
         log.info(topMusics.toString());
         return ResponseEntity.ok(topMusics);
+    }
+
+    // 여러 음악 ID로 배치 조회 (랭킹용)
+    @PostMapping("/batch")
+    public ResponseEntity<List<MusicResponseDto>> getMusicsByIds(@RequestBody List<Long> musicIds) {
+        List<MusicResponseDto> musics = musicService.getMusicsByIds(musicIds);
+        return ResponseEntity.ok(musics);
     }
 
     @GetMapping("/recent")

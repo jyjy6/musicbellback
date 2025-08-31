@@ -51,13 +51,10 @@ public class RecentPlayService {
                 // 기존 항목 제거 실패해도 계속 진행
                 log.warn("기존 항목 제거 중 오류 발생: {}", e.getMessage());
             }
-
             // 맨 앞에 추가
             redisService.leftPush(key, jsonValue);
-
             // 최대 개수 제한
             redisService.trimList(key, 0, MAX_RECENT_ITEMS - 1);
-
             // TTL 설정
             redisService.expire(key, RECENT_PLAY_TTL, TimeUnit.DAYS);
 
