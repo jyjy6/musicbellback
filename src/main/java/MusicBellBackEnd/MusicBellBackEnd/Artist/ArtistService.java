@@ -6,6 +6,7 @@ import MusicBellBackEnd.MusicBellBackEnd.Artist.Dto.ArtistResponseDto;
 import MusicBellBackEnd.MusicBellBackEnd.Artist.Dto.ArtistSearchDto;
 import MusicBellBackEnd.MusicBellBackEnd.Artist.ElasticSearch.ArtistSyncService;
 import MusicBellBackEnd.MusicBellBackEnd.GlobalErrorHandler.GlobalException;
+import MusicBellBackEnd.MusicBellBackEnd.Kafka.Producer.ElasticSearchProducerService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
@@ -27,6 +28,7 @@ public class ArtistService {
     
     private final ArtistRepository artistRepository;
     private final ArtistSyncService artistSyncService;
+    private final ElasticSearchProducerService elasticSearchProducerService;
     
     /**
      * 아티스트명으로 찾기 또는 새로 생성
@@ -77,7 +79,11 @@ public class ArtistService {
         log.info("새 아티스트 생성: {} (ID: {})", trimmedName, savedArtist.getId());
 
         //추후 Kafka처리
-        artistSyncService.syncSingleArtist(savedArtist.getId());
+        try {
+            elasticSearchProducerService.sendSyncEvent(savedArtist.getId());
+        } catch(GlobalException e){
+            log.warn("findOrCreateArtist함수 아티스트 통계 ES 동기화 실패: artistId={}, error={}", savedArtist.getId(), e.getMessage());
+        }
         
         return savedArtist;
     }
@@ -121,9 +127,9 @@ public class ArtistService {
             artistRepository.updateTotalLikeCount(artistId, likeCountDelta);
         }
         
-        // ElasticSearch 동기화 (통계 업데이트 후)
+        // ElasticSearch 동기화 (통계 업데이트 후) Kafka활용
         try {
-            artistSyncService.syncArtistStats(artistId);
+            elasticSearchProducerService.sendSyncEvent(artistId);
         } catch (Exception e) {
             log.warn("아티스트 통계 ES 동기화 실패: artistId={}, error={}", artistId, e.getMessage());
             // ES 동기화 실패해도 메인 로직은 계속 진행
@@ -183,9 +189,9 @@ public class ArtistService {
         ArtistEntity savedArtist = artistRepository.save(artistEntity);
         log.info("아티스트 생성 완료: {} (ID: {})", savedArtist.getName(), savedArtist.getId());
 
-        // ES 동기화
+        // ES 동기화 Kafka활용
         try {
-            artistSyncService.syncSingleArtist(savedArtist.getId());
+            elasticSearchProducerService.sendSyncEvent(savedArtist.getId());
         } catch (Exception e) {
             log.warn("아티스트 생성 후 ES 동기화 실패: artistId={}, error={}", savedArtist.getId(), e.getMessage());
             // ES 동기화 실패해도 메인 로직은 계속 진행
@@ -289,9 +295,9 @@ public class ArtistService {
         // 업데이트
         updateArtistEntity(artist, requestDto);
         ArtistEntity savedArtist = artistRepository.save(artist);
-        // ES 동기화 추후Kafka
+        // ES 동기화 Kafka활용
         try {
-            artistSyncService.syncSingleArtist(id);
+            elasticSearchProducerService.sendSyncEvent(id);
         } catch (Exception e) {
             log.warn("아티스트 수정 후 ES 동기화 실패: artistId={}, error={}", id, e.getMessage());
             // ES 동기화 실패해도 메인 로직은 계속 진행
@@ -299,10 +305,10 @@ public class ArtistService {
         log.info("아티스트 ID {} 정보가 수정되었습니다.", id);
         return convertToResponseDto(savedArtist);
     }
-
     /**
      * 아티스트 상태 토글 (활성화/비활성화)
      */
+
     @Transactional
     public boolean toggleArtistStatus(Long id, boolean isActive) {
         ArtistEntity artist = artistRepository.findById(id)
@@ -340,6 +346,12 @@ public class ArtistService {
 
         artist.setIsActive(false);
         artistRepository.save(artist);
+        //ES 삭제 Kafka활용
+        try{
+            elasticSearchProducerService.sendDeleteEvent(id);
+        } catch(GlobalException e){
+            log.warn("아티스트 삭제 후 ES 동기화 실패: artistId={}, error={}", id, e.getMessage());
+        }
 
         log.info("아티스트 ID {}가 삭제되었습니다 (소프트 삭제).", id);
     }

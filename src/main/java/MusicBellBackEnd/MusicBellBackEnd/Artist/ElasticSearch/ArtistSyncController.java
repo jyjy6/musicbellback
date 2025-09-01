@@ -65,7 +65,7 @@ public class ArtistSyncController {
     ) {
         try {
             log.info("📊 아티스트 통계 동기화 요청: artistId={}", artistId);
-            artistSyncService.syncArtistStats(artistId);
+            artistSyncService.syncSingleArtist(artistId);
             return ResponseEntity.ok("아티스트 통계 동기화가 완료되었습니다.");
         } catch (Exception e) {
             log.error("❌ 통계 동기화 실패: artistId={}, error={}", artistId, e.getMessage());

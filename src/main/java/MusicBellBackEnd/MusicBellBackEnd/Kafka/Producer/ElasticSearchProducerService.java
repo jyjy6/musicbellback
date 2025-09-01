@@ -6,6 +6,7 @@ import MusicBellBackEnd.MusicBellBackEnd.Kafka.Event.ElasticSearchEvent;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.stereotype.Service;
@@ -15,19 +16,21 @@ import org.springframework.stereotype.Service;
 public class ElasticSearchProducerService {
     private final KafkaTemplate<String, ElasticSearchEvent> kafkaTemplate;
     private static final Logger log = LoggerFactory.getLogger(ElasticSearchProducerService.class);
+    @Value("${spring.kafka.topics.es-sending}")
+    private String esTopic;
 
 
-    public void sendSyncEvent(Long imageId) {
-        sendEvent(new ElasticSearchEvent(imageId, "sync"));
+    public void sendSyncEvent(Long artstId) {
+        sendEvent(new ElasticSearchEvent(artstId, "sync"));
     }
 
-    public void sendDeleteEvent(Long imageId) {
-        sendEvent(new ElasticSearchEvent(imageId, "delete"));
+    public void sendDeleteEvent(Long artstId) {
+        sendEvent(new ElasticSearchEvent(artstId, "delete"));
     }
 
     private void sendEvent(ElasticSearchEvent event) {
         try {
-            kafkaTemplate.send("es-sending", event);
+            kafkaTemplate.send(esTopic, event);
             log.info("ElasticSearchEvent 전송: {}", event);
         } catch (Exception e) {
             log.error("ElasticSearchEvent 전송 실패", e);

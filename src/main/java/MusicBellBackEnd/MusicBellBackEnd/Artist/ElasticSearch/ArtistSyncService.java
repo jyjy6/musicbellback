@@ -3,6 +3,7 @@ package MusicBellBackEnd.MusicBellBackEnd.Artist.ElasticSearch;
 import MusicBellBackEnd.MusicBellBackEnd.Artist.ArtistEntity;
 import MusicBellBackEnd.MusicBellBackEnd.Artist.ArtistRepository;
 import MusicBellBackEnd.MusicBellBackEnd.GlobalErrorHandler.GlobalException;
+import MusicBellBackEnd.MusicBellBackEnd.Kafka.Producer.ElasticSearchProducerService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
@@ -21,6 +22,7 @@ public class ArtistSyncService {
 
     private final ArtistRepository artistRepository;
     private final ArtistSearchRepository artistSearchRepository;
+    private final ElasticSearchProducerService elasticSearchProducerService;
 
     /**
      * 🔄 Artist 엔티티를 ArtistDocument로 변환
@@ -130,23 +132,6 @@ public class ArtistSyncService {
         }
     }
 
-    /**
-     * 🎵 아티스트 통계 업데이트 시 재동기화
-     */
-    @Transactional
-    public void syncArtistStats(Long artistId) {
-        try {
-            ArtistEntity artist = artistRepository.findById(artistId)
-                    .orElseThrow(() -> new GlobalException("아티스트를 찾을 수 없습니다", "ARTIST_NOT_FOUND", HttpStatus.NOT_FOUND));
-            
-            ArtistDocument document = convertToDocument(artist);
-            artistSearchRepository.save(document);
-            
-            log.info("📊 아티스트 통계 동기화 완료: id={}, name={}", artistId, artist.getName());
-        } catch (Exception e) {
-            log.error("❌ 아티스트 통계 동기화 실패: id={}, error={}", artistId, e.getMessage());
-        }
-    }
 
     /**
      * 🗑️ 아티스트 삭제 시 ElasticSearch에서도 제거
@@ -154,10 +139,14 @@ public class ArtistSyncService {
     @Transactional
     public void deleteFromIndex(Long artistId) {
         try {
-            artistSearchRepository.deleteById(artistId.toString());
-            log.info("🗑️ ElasticSearch에서 아티스트 삭제 완료: id={}", artistId);
+            ArtistDocument artistDocument =
+                    artistSearchRepository.findById(artistId.toString())
+                            .orElseThrow(()-> new GlobalException("아티스트 찾을 수 없습니다.", "ARTIST_DOCUMENT_NOT_FOUND"));
+            artistDocument.setIsActive(false);
+            artistSearchRepository.save(artistDocument);
+            log.info("🗑️ ElasticSearch에서 아티스트 삭제(비활성화) 완료: id={}", artistId);
         } catch (Exception e) {
-            log.error("❌ ElasticSearch 아티스트 삭제 실패: id={}, error={}", artistId, e.getMessage());
+            log.error("❌ ElasticSearch 아티스트 삭제(비활성화)  실패: id={}, error={}", artistId, e.getMessage());
         }
     }
 

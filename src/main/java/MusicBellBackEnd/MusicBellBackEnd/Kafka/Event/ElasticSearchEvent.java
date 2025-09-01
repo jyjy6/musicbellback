@@ -8,6 +8,6 @@ import lombok.NoArgsConstructor;
 @NoArgsConstructor
 @AllArgsConstructor
 public class ElasticSearchEvent {
-    private Long musicId;
+    private Long artistId;
     private String action; // "sync" or "delete"
 }
