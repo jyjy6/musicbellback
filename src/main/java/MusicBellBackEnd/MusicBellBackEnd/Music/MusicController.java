@@ -2,6 +2,8 @@ package MusicBellBackEnd.MusicBellBackEnd.Music;
 
 import MusicBellBackEnd.MusicBellBackEnd.Auth.CustomUserDetails;
 import MusicBellBackEnd.MusicBellBackEnd.GlobalErrorHandler.GlobalException;
+import MusicBellBackEnd.MusicBellBackEnd.Lyrics.LyricsService;
+import MusicBellBackEnd.MusicBellBackEnd.Lyrics.dto.LyricsResponse;
 import MusicBellBackEnd.MusicBellBackEnd.Music.Dto.*;
 import MusicBellBackEnd.MusicBellBackEnd.Redis.*;
 import lombok.RequiredArgsConstructor;
@@ -16,6 +18,7 @@ import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 
 @Slf4j
@@ -26,6 +29,7 @@ public class MusicController {
 
     private final MusicService musicService;
     private final PlaylistService playlistService;
+    private final LyricsService lyricsService;
     @Value("${spring.cloud.aws.s3.bucket}")
     private String bucket;
     private final RankingService rankingService;
@@ -438,6 +442,35 @@ public class MusicController {
             log.error("재생 카운트 증가 실패: {}", e.getMessage());
             throw new GlobalException("재생 카운트 증가에 실패했습니다.", "PLAY_COUNT_INCREMENT_FAILED", HttpStatus.INTERNAL_SERVER_ERROR);
         }
+    }
+
+    // === 가사 관련 엔드포인트 ===
+
+    /**
+     * 음악의 가사 조회
+     */
+    @GetMapping("/{id}/lyrics")
+    public ResponseEntity<LyricsResponse> getMusicLyrics(@PathVariable Long id) {
+        log.info("음악 가사 조회 요청: musicId={}", id);
+        
+        Optional<LyricsResponse> lyrics = lyricsService.getLyricsByMusicId(id);
+        
+        if (lyrics.isPresent()) {
+            return ResponseEntity.ok(lyrics.get());
+        } else {
+            return ResponseEntity.notFound().build();
+        }
+    }
+
+    /**
+     * 음악에 가사가 있는지 확인
+     */
+    @GetMapping("/{id}/lyrics/exists")
+    public ResponseEntity<Map<String, Boolean>> checkMusicLyricsExists(@PathVariable Long id) {
+        log.info("음악 가사 존재 여부 확인: musicId={}", id);
+        
+        Optional<LyricsResponse> lyrics = lyricsService.getLyricsByMusicId(id);
+        return ResponseEntity.ok(Map.of("hasLyrics", lyrics.isPresent()));
     }
 }
 

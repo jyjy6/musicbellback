@@ -1,6 +1,7 @@
 package MusicBellBackEnd.MusicBellBackEnd.Music;
 
 import MusicBellBackEnd.MusicBellBackEnd.Artist.ArtistEntity;
+import MusicBellBackEnd.MusicBellBackEnd.Lyrics.LyricsEntity;
 import jakarta.persistence.*;
 import lombok.*;
 import org.hibernate.annotations.CreationTimestamp;
@@ -81,6 +82,10 @@ public class MusicEntity {
     @UpdateTimestamp
     @Column(nullable = false)
     private LocalDateTime updatedAt;
+    
+    // === 가사 관계 ===
+    @OneToOne(mappedBy = "music", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
+    private LyricsEntity lyrics;
     
     // === 마이그레이션 관련 헬퍼 메소드 ===
     
