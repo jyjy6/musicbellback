@@ -21,10 +21,10 @@ public class LyricsLineEntity {
     private LyricsEntity lyrics;
     
     @Column(nullable = false)
-    private Integer startTime; // 시작 시간 (밀리초)
+    private Integer startTime;
     
     @Column(nullable = false)
-    private Integer endTime; // 종료 시간 (밀리초)
+    private Integer endTime;
     
     @Column(nullable = false, columnDefinition = "TEXT")
     private String text; // 가사 텍스트

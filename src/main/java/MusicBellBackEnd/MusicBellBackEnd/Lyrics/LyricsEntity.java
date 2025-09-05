@@ -34,11 +34,8 @@ public class LyricsEntity {
     @Column(columnDefinition = "TEXT")
     private String fullLyrics; // 전체 가사 (일반 텍스트)
     
-    @Column(columnDefinition = "TEXT")
-    private String syncedLyrics; // 동기화된 가사 (LRC 형식 또는 JSON)
-    
     @Column(length = 10)
-    private String language = "KO"; // 가사 언어 (KO, EN, JP, etc.)
+    private String language; // 가사 언어 (KO, EN, JP, etc.)
     
     @Column(length = 50)
     private String source = "AI_GENERATED"; // 가사 출처 (AI_GENERATED, MANUAL, IMPORTED)

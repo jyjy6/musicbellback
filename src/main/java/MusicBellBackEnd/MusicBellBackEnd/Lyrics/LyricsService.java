@@ -1,8 +1,7 @@
 package MusicBellBackEnd.MusicBellBackEnd.Lyrics;
 
 import MusicBellBackEnd.MusicBellBackEnd.GlobalErrorHandler.GlobalException;
-import MusicBellBackEnd.MusicBellBackEnd.Lyrics.dto.LyricsGenerationRequest;
-import MusicBellBackEnd.MusicBellBackEnd.Lyrics.dto.LyricsResponse;
+import MusicBellBackEnd.MusicBellBackEnd.Lyrics.dto.*;
 import MusicBellBackEnd.MusicBellBackEnd.Music.MusicEntity;
 import MusicBellBackEnd.MusicBellBackEnd.Music.MusicRepository;
 import lombok.RequiredArgsConstructor;
@@ -23,7 +22,7 @@ public class LyricsService {
     private final LyricsRepository lyricsRepository;
     private final LyricsLineRepository lyricsLineRepository;
     private final MusicRepository musicRepository;
-    private final GeminiLyricsService geminiLyricsService;
+    private final OpenAIWhisperLyricsService openAIWhisperLyricsService;
     
     /**
      * 음악 ID로 가사 조회
@@ -56,13 +55,23 @@ public class LyricsService {
         }
         
         try {
-            // Whisper를 사용하여 가사 생성
-            String generatedLyrics = geminiLyricsService.generateLyrics(request);
-            
+            // Whisper를 사용하여 세그먼트 포함 가사 생성
+            TranscriptionResult tr = openAIWhisperLyricsService.generateLyricsWithSegments(request);
+
+            // 결과 검증: 비어있으면 실패 처리
+            boolean hasSegments = tr != null && tr.getSegments() != null && !tr.getSegments().isEmpty();
+            boolean hasText = tr != null && tr.getFullText() != null && !tr.getFullText().trim().isEmpty();
+            if (!hasSegments && !hasText) {
+                throw new GlobalException(
+                        "Whisper 결과가 비어있습니다",
+                        "WHISPER_EMPTY_RESULT",
+                        HttpStatus.BAD_GATEWAY);
+            }
+
             // 가사 엔티티 생성
             LyricsEntity lyrics = LyricsEntity.builder()
                     .music(music)
-                    .fullLyrics(generatedLyrics)
+                    .fullLyrics(tr.getFullText())
                     .language(request.getTargetLanguage())
                     .source("AI_GENERATED")
                     .generationType("SPEECH_TO_TEXT")
@@ -70,20 +79,42 @@ public class LyricsService {
                     .isActive(true)
                     .createdBy("WHISPER_AI")
                     .build();
-            
-            // 동기화 가사 생성 (선택적)
-            if (request.getGenerateSync()) {
-                String syncedLyrics = generateSyncedLyrics(generatedLyrics, music.getDuration());
-                lyrics.setSyncedLyrics(syncedLyrics);
-            }
-            
+
+            // 옵션: LRC 같은 syncedLyrics를 원하면 여기서 생성 가능 (현재는 세그먼트 기반 라인 생성으로 대체)
             // 먼저 LyricsEntity 저장 (ID 생성)
             LyricsEntity savedLyrics = lyricsRepository.save(lyrics);
             log.info("가사 엔티티 저장 완료: lyricsId={}", savedLyrics.getId());
-            
-            // 동기화 가사가 있으면 가사 라인 생성
-            if (request.getGenerateSync() && savedLyrics.getSyncedLyrics() != null) {
-                createLyricsLines(savedLyrics, savedLyrics.getSyncedLyrics());
+
+            // 세그먼트로 라인 생성
+            if (tr.getSegments() != null && !tr.getSegments().isEmpty()) {
+                int order = 0;
+                for (TranscriptionResult.Segment seg : tr.getSegments()) {
+                    LyricsLineEntity line = LyricsLineEntity.builder()
+                            .lyrics(savedLyrics)
+                            .startTime(seg.getStartMs())
+                            .endTime(seg.getEndMs())
+                            .text(seg.getText())
+                            .lineOrder(seg.getOrder() != null ? seg.getOrder() : order)
+                            .type(seg.getType() != null ? seg.getType() : "VOCAL")
+                            .build();
+                    lyricsLineRepository.save(line);
+                    order++;
+                }
+            } else if (tr.getFullText() != null && !tr.getFullText().isEmpty()) {
+                // 세그먼트가 없으면 간단 분할 (줄바꿈)
+                String[] lines = tr.getFullText().split("\n");
+                for (int i = 0; i < lines.length; i++) {
+                    if (lines[i].trim().isEmpty()) continue;
+                    LyricsLineEntity line = LyricsLineEntity.builder()
+                            .lyrics(savedLyrics)
+                            .startTime(i * 5000)
+                            .endTime((i + 1) * 5000)
+                            .text(lines[i].trim())
+                            .lineOrder(i)
+                            .type("VOCAL")
+                            .build();
+                    lyricsLineRepository.save(line);
+                }
             }
             
             log.info("가사 생성 완료: lyricsId={}", savedLyrics.getId());
@@ -91,54 +122,78 @@ public class LyricsService {
             
         } catch (Exception e) {
             log.error("가사 생성 실패: musicId={}, error={}", request.getMusicId(), e.getMessage());
+            if (e instanceof GlobalException) {
+                throw e;
+            }
             throw new GlobalException(
-                    "가사 생성에 실패했습니다: " + e.getMessage(),
+                    "가사 생성에 실패했습니다",
                     "LYRICS_GENERATION_FAILED",
                     HttpStatus.INTERNAL_SERVER_ERROR);
         }
     }
-    
+
     /**
-     * 가사 번역
+     * 수동 가사 저장/업데이트 (라인 직접 저장)
      */
     @Transactional
-    public LyricsResponse translateLyrics(Long lyricsId, String targetLanguage) {
-        LyricsEntity lyrics = lyricsRepository.findById(lyricsId)
+    public LyricsResponse saveManualLyrics(LyricsManualSaveRequest request) {
+        log.info("수동 가사 저장 요청: musicId={}, lines={}개", request.getMusicId(),
+                request.getLines() != null ? request.getLines().size() : 0);
+
+        MusicEntity music = musicRepository.findById(request.getMusicId())
                 .orElseThrow(() -> new GlobalException(
-                        "가사를 찾을 수 없습니다",
-                        "LYRICS_NOT_FOUND",
+                        "음악을 찾을 수 없습니다",
+                        "MUSIC_NOT_FOUND",
                         HttpStatus.NOT_FOUND));
-        
-        try {
-            String translatedLyrics = geminiLyricsService.translateLyrics(
-                    lyrics.getFullLyrics(), 
-                    lyrics.getLanguage(), 
-                    targetLanguage
-            );
-            
-            // 새로운 번역된 가사 엔티티 생성
-            LyricsEntity translatedLyricsEntity = LyricsEntity.builder()
-                    .music(lyrics.getMusic())
-                    .fullLyrics(translatedLyrics)
-                    .language(targetLanguage)
-                    .source("AI_TRANSLATED")
-                    .generationType("TRANSLATION")
-                    .isVerified(false)
-                    .isActive(true)
-                    .createdBy("GEMINI_AI")
-                    .build();
-            
-            LyricsEntity savedLyrics = lyricsRepository.save(translatedLyricsEntity);
-            return convertToResponse(savedLyrics);
-            
-        } catch (Exception e) {
-            log.error("가사 번역 실패: lyricsId={}, error={}", lyricsId, e.getMessage());
-            throw new GlobalException(
-                    "가사 번역에 실패했습니다: " + e.getMessage(),
-                    "LYRICS_TRANSLATION_FAILED",
-                    HttpStatus.INTERNAL_SERVER_ERROR);
+
+        LyricsEntity lyrics = lyricsRepository.findByMusicId(request.getMusicId())
+                .orElse(LyricsEntity.builder()
+                        .music(music)
+                        .language(request.getLanguage() != null ? request.getLanguage() : "KO")
+                        .source("MANUAL")
+                        .generationType("MANUAL_INPUT")
+                        .isVerified(false)
+                        .isActive(true)
+                        .createdBy(request.getCreatedBy() != null ? request.getCreatedBy() : "USER")
+                        .build());
+
+        // fullLyrics 세팅 (없으면 lines에서 합성)
+        if (request.getFullLyrics() != null) {
+            lyrics.setFullLyrics(request.getFullLyrics());
+        } else if (request.getLines() != null && !request.getLines().isEmpty()) {
+            String joined = request.getLines().stream()
+                    .map(l -> l.getText() != null ? l.getText() : "")
+                    .collect(java.util.stream.Collectors.joining("\n"));
+            lyrics.setFullLyrics(joined);
         }
+        lyrics.setLanguage(request.getLanguage() != null ? request.getLanguage() : lyrics.getLanguage());
+        lyrics.setSource("MANUAL");
+        lyrics.setGenerationType("MANUAL_INPUT");
+
+        // 저장/업데이트
+        LyricsEntity saved = lyricsRepository.save(lyrics);
+
+        // 기존 라인 삭제 후 재저장
+        lyricsLineRepository.deleteByLyricsId(saved.getId());
+        if (request.getLines() != null) {
+            for (LyricsLineRequest l : request.getLines()) {
+                Integer startMs = l.getStartSec() != null ? l.getStartSec() * 1000 : l.getStartTime();
+                Integer endMs = l.getEndSec() != null ? l.getEndSec() * 1000 : l.getEndTime();
+                LyricsLineEntity line = LyricsLineEntity.builder()
+                        .lyrics(saved)
+                        .startTime(startMs != null ? startMs : 0)
+                        .endTime(endMs != null ? endMs : (startMs != null ? startMs + 5000 : 5000))
+                        .text(l.getText())
+                        .lineOrder(l.getLineOrder())
+                        .type(l.getType() != null ? l.getType() : "VOCAL")
+                        .build();
+                lyricsLineRepository.save(line);
+            }
+        }
+
+        return convertToResponse(saved);
     }
+
     
     /**
      * 가사 삭제
@@ -159,100 +214,7 @@ public class LyricsService {
         
         log.info("가사 삭제 완료: lyricsId={}", lyricsId);
     }
-    
-    /**
-     * 동기화된 가사 생성 (간단한 구현)
-     */
-    private String generateSyncedLyrics(String lyrics, Integer duration) {
-        // 실제로는 더 정교한 알고리즘이 필요
-        // 여기서는 간단하게 가사를 시간별로 분할
-        String[] lines = lyrics.split("\n");
-        StringBuilder syncedLyrics = new StringBuilder();
-        
-        if (duration != null && lines.length > 0) {
-            int timePerLine = (duration * 1000) / lines.length; // 밀리초 단위
-            
-            for (int i = 0; i < lines.length; i++) {
-                int startTime = i * timePerLine;
-                int endTime = (i + 1) * timePerLine;
-                
-                syncedLyrics.append(String.format("[%02d:%02d.%02d]%s\n", 
-                        startTime / 60000, 
-                        (startTime % 60000) / 1000, 
-                        (startTime % 1000) / 10,
-                        lines[i]));
-            }
-        }
-        
-        return syncedLyrics.toString();
-    }
-    
-    /**
-     * 가사 라인 생성
-     */
-    private void createLyricsLines(LyricsEntity lyrics, String syncedLyrics) {
-        if (lyrics.getId() == null) {
-            log.error("LyricsEntity가 저장되지 않았습니다. ID가 null입니다.");
-            return;
-        }
-        
-        String[] lines = syncedLyrics.split("\n");
-        log.info("가사 라인 생성 시작: lyricsId={}, 총 {} 라인", lyrics.getId(), lines.length);
-        
-        for (int i = 0; i < lines.length; i++) {
-            String line = lines[i];
-            if (line.trim().isEmpty()) continue;
-            
-            try {
-                // LRC 형식 파싱 (간단한 구현)
-                if (line.startsWith("[") && line.contains("]")) {
-                    String timeStr = line.substring(1, line.indexOf("]"));
-                    String text = line.substring(line.indexOf("]") + 1);
-                    
-                    int startTime = parseTimeToMillis(timeStr);
-                    int endTime = (i < lines.length - 1) ? 
-                            parseTimeToMillis(lines[i + 1].substring(1, lines[i + 1].indexOf("]"))) :
-                            startTime + 5000; // 기본 5초
-                    
-                    LyricsLineEntity lyricsLine = LyricsLineEntity.builder()
-                            .lyrics(lyrics)
-                            .startTime(startTime)
-                            .endTime(endTime)
-                            .text(text)
-                            .lineOrder(i)
-                            .type("VOCAL")
-                            .build();
-                    
-                    lyricsLineRepository.save(lyricsLine);
-                    log.debug("가사 라인 저장 완료: lineOrder={}, text={}", i, text);
-                    
-                } else {
-                    // LRC 형식이 아닌 경우 간단한 시간 분할
-                    int startTime = i * 5000; // 5초 간격
-                    int endTime = (i + 1) * 5000;
-                    
-                    LyricsLineEntity lyricsLine = LyricsLineEntity.builder()
-                            .lyrics(lyrics)
-                            .startTime(startTime)
-                            .endTime(endTime)
-                            .text(line.trim())
-                            .lineOrder(i)
-                            .type("VOCAL")
-                            .build();
-                    
-                    lyricsLineRepository.save(lyricsLine);
-                    log.debug("가사 라인 저장 완료 (일반): lineOrder={}, text={}", i, line.trim());
-                }
-                
-            } catch (Exception e) {
-                log.warn("가사 라인 파싱 실패: line={}, error={}", line, e.getMessage());
-                // 파싱 실패해도 계속 진행
-            }
-        }
-        
-        log.info("가사 라인 생성 완료: lyricsId={}", lyrics.getId());
-    }
-    
+
     /**
      * 시간 문자열을 밀리초로 변환
      */
@@ -291,7 +253,6 @@ public class LyricsService {
                 .id(lyrics.getId())
                 .musicId(lyrics.getMusic().getId())
                 .fullLyrics(lyrics.getFullLyrics())
-                .syncedLyrics(lyrics.getSyncedLyrics())
                 .language(lyrics.getLanguage())
                 .source(lyrics.getSource())
                 .generationType(lyrics.getGenerationType())
