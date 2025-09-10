@@ -31,7 +31,6 @@ public class RankingService {
         String today = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd"));
         String thisWeek = getWeekKey();
         String thisMonth = getMonthKey();
-
         String prefix = table+":";
 
         // Sorted Set을 사용하여 점수 증가 (더 효율적)

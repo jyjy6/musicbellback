@@ -1,9 +1,14 @@
 package MusicBellBackEnd.MusicBellBackEnd.Music;
 
+import MusicBellBackEnd.MusicBellBackEnd.Artist.ArtistService;
 import MusicBellBackEnd.MusicBellBackEnd.Auth.CustomUserDetails;
 import MusicBellBackEnd.MusicBellBackEnd.GlobalErrorHandler.GlobalException;
 import MusicBellBackEnd.MusicBellBackEnd.Music.Dto.MusicRequestDto;
 import MusicBellBackEnd.MusicBellBackEnd.Music.Dto.MusicResponseDto;
+import MusicBellBackEnd.MusicBellBackEnd.Redis.PlaylistService;
+import MusicBellBackEnd.MusicBellBackEnd.Redis.RankingService;
+import MusicBellBackEnd.MusicBellBackEnd.Redis.RecentPlayService;
+import MusicBellBackEnd.MusicBellBackEnd.Redis.RedisService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -12,6 +17,7 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.http.HttpStatus;
 import org.springframework.security.core.Authentication;
 import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.presigner.S3Presigner;
@@ -24,9 +30,12 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertAll;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.doNothing;
+import static org.mockito.Mockito.doThrow;
 
 @ExtendWith(MockitoExtension.class)
 class MusicServiceTest {
@@ -46,18 +55,57 @@ class MusicServiceTest {
     @Mock
     private CustomUserDetails customUserDetails;
 
+    // 추가 Mock 객체들 - MusicService의 의존성들
+    @Mock
+    private ArtistService artistService;
+    
+    @Mock
+    private RedisService redisService;
+    
+    @Mock
+    private RankingService rankingService;
+    
+    @Mock
+    private PlaylistService playlistService;
+    
+    @Mock
+    private RecentPlayService recentPlayService;
+
     @InjectMocks
     private MusicService musicService;
 
     private MusicRequestDto sampleDto1;
     private MusicRequestDto sampleDto2;
 
+    // 테스트용 상수 정의
+    private static final Long TEST_USER_ID = 123L;
+    private static final String TEST_UPLOADER_NAME = "tester";
+    private static final Long TEST_MUSIC_ID = 1L;
+    
+    // 테스트용 샘플 엔티티
+    private MusicEntity sampleEntity;
+    
     @BeforeEach
     void setUp() {
-        // CustomUserDetails 모킹 설정
-        when(customUserDetails.getId()).thenReturn(123L);
+        // === 1. Mock 객체 공통 설정 (모든 테스트에서 필요) ===
+        setupAuthenticationMocks();
+        
+        // === 2. 테스트용 샘플 데이터 생성 (여러 테스트에서 재사용) ===
+        createSampleDtos();
+        createSampleEntity();
+        
+        // === 3. 기본 Mock 동작 설정 ===
+        setupDefaultMockBehaviors();
+    }
+    
+    private void setupAuthenticationMocks() {
+        // 인증 관련 Mock 설정 - 모든 테스트에서 동일하게 사용
+        when(customUserDetails.getId()).thenReturn(TEST_USER_ID);
         when(authentication.getPrincipal()).thenReturn(customUserDetails);
-
+        when(authentication.isAuthenticated()).thenReturn(true);
+    }
+    
+    private void createSampleDtos() {
         sampleDto1 = MusicRequestDto.builder()
                 .title("Song A")
                 .artist("Artist A")
@@ -67,7 +115,7 @@ class MusicServiceTest {
                 .duration(180)
                 .musicUrl("https://s3/test/song-a.mp3")
                 .albumImageUrl("https://s3/test/album-a.jpg")
-                .uploaderName("tester")
+                .uploaderName(TEST_UPLOADER_NAME)
                 // isPublic intentionally null to test default true
                 .fileSize(123456L)
                 .fileType("mp3")
@@ -83,13 +131,48 @@ class MusicServiceTest {
                 .duration(200)
                 .musicUrl("https://s3/test/song-b.mp3")
                 .albumImageUrl("https://s3/test/album-b.jpg")
-                .uploaderName("tester")
+                .uploaderName(TEST_UPLOADER_NAME)
                 .isPublic(Boolean.TRUE)
                 .fileSize(654321L)
                 .fileType("mp3")
                 .musicGrade("EXPLICIT")
                 .build();
-
+    }
+    
+    private void createSampleEntity() {
+        sampleEntity = MusicEntity.builder()
+                .id(TEST_MUSIC_ID)
+                .title("Sample Song")
+                .artist("Sample Artist")
+                .album("Sample Album")
+                .genre("POP")
+                .releaseDate(LocalDate.of(2024, 1, 1))
+                .duration(180)
+                .musicUrl("https://s3/test/sample.mp3")
+                .albumImageUrl("https://s3/test/sample.jpg")
+                .uploaderName(TEST_UPLOADER_NAME)
+                .uploaderId(TEST_USER_ID)
+                .playCount(100L)
+                .likeCount(50L)
+                .isPublic(true)
+                .fileSize(123456L)
+                .fileType("mp3")
+                .musicGrade("GENERAL")
+                .build();
+    }
+    
+    private void setupDefaultMockBehaviors() {
+        // 기본적인 Mock 동작 설정 - 필요시 개별 테스트에서 override 가능
+        // void 메서드들은 doNothing()으로 설정
+        doNothing().when(playlistService).addToPlaylist(any(), any(), any(), any());
+        doNothing().when(recentPlayService).addRecentPlay(any(), any(), any(), any(), any(), any());
+        doNothing().when(redisService).incrementHashValue(any(), any(), any());
+        doNothing().when(rankingService).updatePlayScore(any(), any());
+        doNothing().when(artistService).updateArtistStats(any(), any(), any());
+        
+        // 기본적으로 빈 Optional 반환하도록 설정
+        when(musicRepository.findById(any(Long.class)))
+                .thenReturn(java.util.Optional.empty());
     }
     
 
@@ -230,6 +313,198 @@ class MusicServiceTest {
                 () -> assertThat(thrown.getErrorCode()).isEqualTo("MUSIC_UPLOAD_FAILED")
         );
     }
+
+    // ===== getMusicById 테스트 =====
+    
+    @Test
+    @DisplayName("getMusicById: 존재하는 음악 ID로 조회 시 성공적으로 반환한다")
+    void getMusicById_success() {
+        // given
+        when(musicRepository.findById(TEST_MUSIC_ID))
+                .thenReturn(java.util.Optional.of(sampleEntity));
+        
+        // when
+        MusicResponseDto result = musicService.getMusicById(TEST_MUSIC_ID, authentication);
+        
+        // then
+        assertAll(
+                () -> assertThat(result).isNotNull(),
+                () -> assertThat(result.getId()).isEqualTo(TEST_MUSIC_ID),
+                () -> assertThat(result.getTitle()).isEqualTo(sampleEntity.getTitle()),
+                () -> assertThat(result.getArtist()).isEqualTo(sampleEntity.getArtist())
+        );
+        
+        // 플레이리스트와 최근 재생 목록 추가 검증
+        verify(playlistService, times(1)).addToPlaylist(
+                eq(TEST_USER_ID), eq(TEST_MUSIC_ID), eq(sampleEntity.getTitle()), eq(sampleEntity.getMusicUrl())
+        );
+        verify(recentPlayService, times(1)).addRecentPlay(
+                eq(TEST_USER_ID), eq(TEST_MUSIC_ID), eq(sampleEntity.getTitle()), 
+                eq(sampleEntity.getAlbumImageUrl()), eq(sampleEntity.getArtist()), eq(sampleEntity.getDuration())
+        );
+    }
+    
+    @Test
+    @DisplayName("getMusicById: 존재하지 않는 음악 ID로 조회 시 GlobalException을 던진다")
+    void getMusicById_notFound_throwsGlobalException() {
+        // given
+        when(musicRepository.findById(TEST_MUSIC_ID))
+                .thenReturn(java.util.Optional.empty());
+        
+        // when & then
+        GlobalException thrown = assertThrows(GlobalException.class,
+                () -> musicService.getMusicById(TEST_MUSIC_ID, authentication));
+        
+        assertAll(
+                () -> assertThat(thrown.getMessage()).isEqualTo("음악을 찾을 수 없습니다."),
+                () -> assertThat(thrown.getErrorCode()).isEqualTo("MUSIC_NOT_FOUND")
+        );
+    }
+    
+    @Test
+    @DisplayName("getMusicById: 인증되지 않은 사용자는 플레이리스트 추가 없이 음악 조회만 가능하다")
+    void getMusicById_unauthenticated_success() {
+        // given
+        when(musicRepository.findById(TEST_MUSIC_ID))
+                .thenReturn(java.util.Optional.of(sampleEntity));
+        when(authentication.isAuthenticated()).thenReturn(false);
+        
+        // when
+        MusicResponseDto result = musicService.getMusicById(TEST_MUSIC_ID, authentication);
+        
+        // then
+        assertThat(result).isNotNull();
+        assertThat(result.getId()).isEqualTo(TEST_MUSIC_ID);
+        
+        // 플레이리스트와 최근 재생 목록 추가가 호출되지 않았는지 검증
+        verify(playlistService, times(0)).addToPlaylist(any(), any(), any(), any());
+        verify(recentPlayService, times(0)).addRecentPlay(any(), any(), any(), any(), any(), any());
+    }
+    
+    @Test
+    @DisplayName("getMusicById: 플레이리스트 추가 실패해도 음악 조회는 성공한다")
+    void getMusicById_playlistAddFails_musicRetrievalSucceeds() {
+        // given
+        when(musicRepository.findById(TEST_MUSIC_ID))
+                .thenReturn(java.util.Optional.of(sampleEntity));
+        // void 메서드에 예외 발생 설정
+        doThrow(new GlobalException("플레이리스트 서비스 오류", "PLAYLIST_SAVE_ERROR", HttpStatus.INTERNAL_SERVER_ERROR))
+                .when(playlistService).addToPlaylist(any(), any(), any(), any());
+        
+        // when
+        MusicResponseDto result = musicService.getMusicById(TEST_MUSIC_ID, authentication);
+        
+        // then
+        assertThat(result).isNotNull();
+        assertThat(result.getId()).isEqualTo(TEST_MUSIC_ID);
+    }
+
+    // ===== getMusicByIdWithoutIncrement 테스트 =====
+    
+    @Test
+    @DisplayName("getMusicByIdWithoutIncrement: 재생 카운트 증가 없이 음악 정보를 조회한다")
+    void getMusicByIdWithoutIncrement_success() {
+        // given
+        when(musicRepository.findById(TEST_MUSIC_ID))
+                .thenReturn(java.util.Optional.of(sampleEntity));
+        
+        // when
+        MusicResponseDto result = musicService.getMusicByIdWithoutIncrement(TEST_MUSIC_ID);
+        
+        // then
+        assertAll(
+                () -> assertThat(result).isNotNull(),
+                () -> assertThat(result.getId()).isEqualTo(TEST_MUSIC_ID),
+                () -> assertThat(result.getTitle()).isEqualTo(sampleEntity.getTitle())
+        );
+        
+        // incrementPlayCount 관련 메서드들이 호출되지 않았는지 확인
+        verify(redisService, times(0)).incrementHashValue(any(), any(), any());
+        verify(rankingService, times(0)).updatePlayScore(any(), any());
+    }
+
+    // ===== toggleLike 테스트 =====
+    
+    @Test
+    @DisplayName("toggleLike: 좋아요 추가 시 카운트가 증가한다")
+    void toggleLike_addLike_success() {
+        // given
+        when(musicRepository.findById(TEST_MUSIC_ID))
+                .thenReturn(java.util.Optional.of(sampleEntity));
+        
+        // when
+        boolean result = musicService.toggleLike(TEST_MUSIC_ID, true);
+        
+        // then
+        assertThat(result).isTrue();
+        verify(musicRepository, times(1)).incrementLikeCount(TEST_MUSIC_ID);
+        verify(musicRepository, times(0)).decrementLikeCount(any());
+    }
+    
+    @Test
+    @DisplayName("toggleLike: 좋아요 취소 시 카운트가 감소한다")
+    void toggleLike_removeLike_success() {
+        // given
+        when(musicRepository.findById(TEST_MUSIC_ID))
+                .thenReturn(java.util.Optional.of(sampleEntity));
+        
+        // when
+        boolean result = musicService.toggleLike(TEST_MUSIC_ID, false);
+        
+        // then
+        assertThat(result).isFalse();
+        verify(musicRepository, times(1)).decrementLikeCount(TEST_MUSIC_ID);
+        verify(musicRepository, times(0)).incrementLikeCount(any());
+    }
+
+    // ===== incrementPlayCount 테스트 =====
+    
+    @Test
+    @DisplayName("incrementPlayCount: 재생 카운트와 관련 서비스들이 정상적으로 업데이트된다")
+    void incrementPlayCount_success() {
+        // given
+        MusicEntity entityWithPlayCount = MusicEntity.builder()
+                .id(TEST_MUSIC_ID)
+                .title("Sample Song")
+                .playCount(100L)
+                .build();
+        
+        when(musicRepository.findById(TEST_MUSIC_ID))
+                .thenReturn(java.util.Optional.of(entityWithPlayCount));
+        when(musicRepository.save(any(MusicEntity.class)))
+                .thenReturn(entityWithPlayCount);
+        
+        // when
+        musicService.incrementPlayCount(TEST_MUSIC_ID);
+        
+        // then
+        verify(musicRepository, times(1)).save(any(MusicEntity.class));
+        verify(redisService, times(1)).incrementHashValue("music:stats:" + TEST_MUSIC_ID, "playCount", 1);
+        verify(rankingService, times(1)).updatePlayScore("music", TEST_MUSIC_ID);
+    }
+    
+    @Test
+    @DisplayName("incrementPlayCount: 존재하지 않는 음악 ID로 호출 시 GlobalException을 던진다")
+    void incrementPlayCount_notFound_throwsGlobalException() {
+        // given
+        when(musicRepository.findById(TEST_MUSIC_ID))
+                .thenReturn(java.util.Optional.empty());
+        
+        // when & then
+        GlobalException thrown = assertThrows(GlobalException.class,
+                () -> musicService.incrementPlayCount(TEST_MUSIC_ID));
+        
+        assertAll(
+                () -> assertThat(thrown.getMessage()).isEqualTo("음악을 찾을 수 없습니다."),
+                () -> assertThat(thrown.getErrorCode()).isEqualTo("NOT_MUSIC_FOUND")
+        );
+    }
+
+
+
+
+
+
 }
 
 

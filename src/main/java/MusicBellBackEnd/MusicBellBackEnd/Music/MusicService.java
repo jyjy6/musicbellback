@@ -88,11 +88,9 @@ public class MusicService {
     public MusicResponseDto getMusicById(Long id, Authentication auth) {
         MusicEntity music = musicRepository.findById(id)
                 .orElseThrow(() -> new GlobalException("음악을 찾을 수 없습니다.", "MUSIC_NOT_FOUND", HttpStatus.NOT_FOUND));
-
         //추후 Kafka로 비동기처리
         this.incrementPlayCount(id);
 
-        
         // 로그인된 사용자의 플레이리스트에 자동 추가
         if(auth != null && auth.isAuthenticated()){
             try {

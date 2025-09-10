@@ -35,6 +35,7 @@ public class RecentPlayService {
 
 
 
+
     @Transactional
     public void addRecentPlay(Long userId, Long musicId, String title, String albumImageUrl, String artist, Integer duration) {
         String key = RECENT_PLAY_KEY + userId;
@@ -133,7 +134,6 @@ public class RecentPlayService {
             // 앞에 추가
             redisService.leftPush(key, musicId.toString());
         }
-
         // 최대 개수 제한
         redisService.trimList(key, 0, MAX_RECENT_ITEMS - 1);
 

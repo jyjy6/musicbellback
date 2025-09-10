@@ -122,9 +122,6 @@ public class LyricsService {
             
         } catch (Exception e) {
             log.error("가사 생성 실패: musicId={}, error={}", request.getMusicId(), e.getMessage());
-            if (e instanceof GlobalException) {
-                throw e;
-            }
             throw new GlobalException(
                     "가사 생성에 실패했습니다",
                     "LYRICS_GENERATION_FAILED",
