@@ -6,6 +6,7 @@ import MusicBellBackEnd.MusicBellBackEnd.Kafka.Event.ElasticSearchEvent;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
+import jakarta.annotation.PostConstruct;
 import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.kafka.support.Acknowledgment;
 import org.springframework.kafka.support.KafkaHeaders;
@@ -32,12 +33,17 @@ import java.time.Instant;
 public class ElasticSearchConsumerService {
     private final ArtistSyncService artistSyncService;
 
+    @PostConstruct
+    public void init() {
+        log.error("🚀🚀🚀 ElasticSearchConsumerService 초기화 완료! 🚀🚀🚀");
+        log.error("ElasticSearchConsumer가 es-sending 토픽을 구독하기 시작합니다!");
+    }
+
     @KafkaListener(
             topics = "${spring.kafka.topics.es-sending}",
             groupId = "${spring.kafka.es.consumer.group-id}",
             containerFactory = "elasticSearchKafkaListenerContainerFactory"
     )
-    @Transactional
     public void handleElasticSearchEvent(
             @Payload ElasticSearchEvent event,
             @Header(KafkaHeaders.RECEIVED_TOPIC) String topic,
@@ -48,6 +54,10 @@ public class ElasticSearchConsumerService {
             Acknowledgment acknowledgment) {
 
         Instant startTime = Instant.now();
+        
+        log.error("🔥🔥🔥 ElasticSearchConsumer 메시지 수신! 🔥🔥🔥");
+        log.error("Topic: {}, Partition: {}, Offset: {}, Event: {}", topic, partition, offset, event);
+        log.error("Event Details - ArtistId: {}, Action: {}", event.getArtistId(), event.getAction());
         
         log.info("ElasticSearch 이벤트 수신 - Topic: {}, Partition: {}, Offset: {}, Event: {}", 
             topic, partition, offset, event);
@@ -93,7 +103,8 @@ public class ElasticSearchConsumerService {
         }
         
         if (event.getAction() == null || event.getAction().trim().isEmpty()) {
-            throw new IllegalArgumentException("Action이 비어있습니다");
+            log.error("🚨🚨🚨 Action이 null이거나 비어있음! 즉시 DLQ로 이동! 🚨🚨🚨");
+            throw new IllegalArgumentException("Action이 비어있습니다: " + event.getAction());
         }
         
         if (!isValidAction(event.getAction())) {

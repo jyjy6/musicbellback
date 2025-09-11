@@ -2,6 +2,7 @@ package MusicBellBackEnd.MusicBellBackEnd.Kafka.Consumer;
 
 import MusicBellBackEnd.MusicBellBackEnd.Kafka.Event.DlqMessage;
 import MusicBellBackEnd.MusicBellBackEnd.Kafka.Event.ElasticSearchEvent;
+import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.kafka.annotation.KafkaListener;
@@ -25,9 +26,15 @@ import org.springframework.stereotype.Service;
 @RequiredArgsConstructor
 public class DlqConsumerService {
 
+    @PostConstruct
+    public void init() {
+        log.error("🚀🚀🚀 DlqConsumerService 초기화 완료! 🚀🚀🚀");
+        log.error("DLQ Consumer가 es-dlq 토픽을 구독하기 시작합니다!");
+    }
+
     @KafkaListener(
-            topics = "${spring.kafka.topics.es-dlq:elasticsearch-dlq}",
-            groupId = "${spring.kafka.dlq.consumer.group-id:dlq-consumer-group}",
+            topics = "${spring.kafka.topics.es-dlq}",
+            groupId = "${spring.kafka.dlq.consumer.group-id}",
             containerFactory = "dlqKafkaListenerContainerFactory"
     )
     public void handleDlqMessage(
@@ -37,12 +44,14 @@ public class DlqConsumerService {
             @Header(KafkaHeaders.OFFSET) long offset,
             Acknowledgment acknowledgment) {
 
+        log.error("💀💀💀 DLQ 메시지 수신 시작! 💀💀💀");
         log.error("=== DLQ 메시지 수신 ===");
         log.error("Topic: {}, Partition: {}, Offset: {}", topic, partition, offset);
         log.error("DLQ 메시지 정보: {}", dlqMessage.getSummary());
         log.error("원본 메시지: {}", dlqMessage.getOriginalValue());
         log.error("에러 정보: {} - {}", dlqMessage.getErrorClass(), dlqMessage.getErrorMessage());
         log.error("실패 시간: {}", dlqMessage.getFailureDateTime());
+        log.error("💀💀💀 DLQ 처리 진행 중... 💀💀💀");
 
         try {
             // DLQ 메시지 처리
@@ -78,7 +87,7 @@ public class DlqConsumerService {
     private void sendAdminNotification(DlqMessage dlqMessage) {
         try {
             // TODO: 실제 알림 시스템 연동 (이메일, 슬랙, 웹훅 등)
-            log.warn("관리자 알림 발송 필요: DLQ 메시지 발생 - {}", dlqMessage.getSummary());
+            log.error("관리자 알림 발송 필요: DLQ 메시지 발생 - {}", dlqMessage.getSummary());
             
             // 심각한 오류의 경우 즉시 알림
             if (isCriticalError(dlqMessage)) {

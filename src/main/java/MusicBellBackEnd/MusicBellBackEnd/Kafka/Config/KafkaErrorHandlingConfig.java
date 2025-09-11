@@ -30,10 +30,10 @@ public class KafkaErrorHandlingConfig {
     @Value("${spring.kafka.topics.es-sending}")
     private String originalTopic;
 
-    @Value("${spring.kafka.topics.es-retry:elasticsearch-retry}")
+    @Value("${spring.kafka.topics.es-retry}")
     private String retryTopic;
 
-    @Value("${spring.kafka.topics.es-dlq:elasticsearch-dlq}")
+    @Value("${spring.kafka.topics.es-dlq}")
     private String dlqTopic;
 
     /**
@@ -44,6 +44,7 @@ public class KafkaErrorHandlingConfig {
      */
     @Bean
     public CommonErrorHandler kafkaErrorHandler(KafkaTemplate<String, Object> kafkaTemplate) {
+        log.info("kafkaErrorHandler 작동");
         // Exponential Backoff 설정
         ExponentialBackOff backOff = new ExponentialBackOff();
         backOff.setInitialInterval(1000L);      // 첫 번째 재시도: 1초 후

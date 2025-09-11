@@ -54,8 +54,8 @@ public class KafkaConsumerConfig {
         configProps.put(ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG, StringDeserializer.class);
         configProps.put(ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG, JsonDeserializer.class);
 
-        // JSON 역직렬화 설정
-        configProps.put(JsonDeserializer.TRUSTED_PACKAGES, "MusicBellBackEnd.MusicBellBackEnd.Kafka.Event.*");
+        // JSON 역직렬화 설정 - 올바른 패키지명으로 수정
+        configProps.put(JsonDeserializer.TRUSTED_PACKAGES, "*");
         configProps.put(JsonDeserializer.USE_TYPE_INFO_HEADERS, false);
         configProps.put(JsonDeserializer.VALUE_DEFAULT_TYPE, ElasticSearchEvent.class.getName());
         
@@ -113,7 +113,7 @@ public class KafkaConsumerConfig {
         configProps.put(ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG, JsonDeserializer.class);
         
         // JSON 역직렬화 설정
-        configProps.put(JsonDeserializer.TRUSTED_PACKAGES, "MusicBellBackEnd.MusicBellBackEnd.Kafka.Event.*");
+        configProps.put(JsonDeserializer.TRUSTED_PACKAGES, "*");
         configProps.put(JsonDeserializer.USE_TYPE_INFO_HEADERS, false);
         configProps.put(JsonDeserializer.VALUE_DEFAULT_TYPE, DlqMessage.class.getName());
         
