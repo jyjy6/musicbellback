@@ -12,7 +12,7 @@ public interface LyricsRepository extends JpaRepository<LyricsEntity, Long> {
     
     Optional<LyricsEntity> findByMusicId(Long musicId);
     
-    @Query("SELECT l FROM LyricsEntity l WHERE l.music.id = :musicId AND l.isActive = true")
+    @Query("SELECT l FROM LyricsEntity l JOIN FETCH l.music WHERE l.music.id = :musicId AND l.isActive = true")
     Optional<LyricsEntity> findActiveLyricsByMusicId(@Param("musicId") Long musicId);
     
     boolean existsByMusicId(Long musicId);

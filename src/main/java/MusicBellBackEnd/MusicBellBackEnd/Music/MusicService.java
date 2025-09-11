@@ -354,6 +354,7 @@ public class MusicService {
             log.error("배치 음악 조회 중 오류 발생: {}", e.getMessage());
             throw new GlobalException("배치 음악 조회에 실패했습니다.", "BATCH_MUSIC_FETCH_FAILED", HttpStatus.INTERNAL_SERVER_ERROR);
         }
+
     }
 
     @Transactional

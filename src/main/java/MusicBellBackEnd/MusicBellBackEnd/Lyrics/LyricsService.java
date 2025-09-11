@@ -10,6 +10,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.stream.Collectors;
@@ -87,6 +88,8 @@ public class LyricsService {
 
             // 세그먼트로 라인 생성
             if (tr.getSegments() != null && !tr.getSegments().isEmpty()) {
+                //N+1 해결을 위한 ArrayList saveAll로 Query문 한번만 실행
+                List<LyricsLineEntity> linesToSave = new ArrayList<>();
                 int order = 0;
                 for (TranscriptionResult.Segment seg : tr.getSegments()) {
                     LyricsLineEntity line = LyricsLineEntity.builder()
@@ -97,12 +100,16 @@ public class LyricsService {
                             .lineOrder(seg.getOrder() != null ? seg.getOrder() : order)
                             .type(seg.getType() != null ? seg.getType() : "VOCAL")
                             .build();
-                    lyricsLineRepository.save(line);
+                    linesToSave.add(line);
                     order++;
                 }
+                lyricsLineRepository.saveAll(linesToSave);
+
             } else if (tr.getFullText() != null && !tr.getFullText().isEmpty()) {
                 // 세그먼트가 없으면 간단 분할 (줄바꿈)
                 String[] lines = tr.getFullText().split("\n");
+                List<LyricsLineEntity> linesToSave = new ArrayList<>();
+
                 for (int i = 0; i < lines.length; i++) {
                     if (lines[i].trim().isEmpty()) continue;
                     LyricsLineEntity line = LyricsLineEntity.builder()
@@ -113,8 +120,9 @@ public class LyricsService {
                             .lineOrder(i)
                             .type("VOCAL")
                             .build();
-                    lyricsLineRepository.save(line);
+                    linesToSave.add(line);
                 }
+                lyricsLineRepository.saveAll(linesToSave);
             }
             
             log.info("가사 생성 완료: lyricsId={}", savedLyrics.getId());
@@ -172,20 +180,23 @@ public class LyricsService {
 
         // 기존 라인 삭제 후 재저장
         lyricsLineRepository.deleteByLyricsId(saved.getId());
+
         if (request.getLines() != null) {
+            List<LyricsLineEntity> linesToSave = new ArrayList<>();
             for (LyricsLineRequest l : request.getLines()) {
                 Integer startMs = l.getStartSec() != null ? l.getStartSec() * 1000 : l.getStartTime();
                 Integer endMs = l.getEndSec() != null ? l.getEndSec() * 1000 : l.getEndTime();
                 LyricsLineEntity line = LyricsLineEntity.builder()
                         .lyrics(saved)
-                        .startTime(startMs != null ? startMs : 0)
-                        .endTime(endMs != null ? endMs : (startMs != null ? startMs + 5000 : 5000))
+                        .startTime(startMs)
+                        .endTime(endMs)
                         .text(l.getText())
                         .lineOrder(l.getLineOrder())
                         .type(l.getType() != null ? l.getType() : "VOCAL")
                         .build();
-                lyricsLineRepository.save(line);
+                linesToSave.add(line);
             }
+            lyricsLineRepository.saveAll(linesToSave);
         }
 
         return convertToResponse(saved);
